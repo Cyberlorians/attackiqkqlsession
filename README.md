@@ -42,6 +42,11 @@ Sentinel Data Lake uses `TimeGenerated`. Microsoft Defender XDR Advanced Hunting
 - Combine evidence with `union`, `project`, `order by`, `has`, `has_any`, and `has_all`.
 - Reconstruct attacker behavior from endpoint telemetry.
 
+Each scenario has two learning moments:
+
+- A KQL teaching question that focuses on the query skill.
+- A CTF question that focuses on the investigation finding.
+
 ## Run Context
 
 | Field | Value |
@@ -85,6 +90,19 @@ Before chasing individual scenarios, students rebuild the attacker timeline. Thi
 ## KQL Skills
 
 `let`, `union`, `project`, `order by`, workstation scoping.
+
+## KQL Teaching Question
+
+Why does this warm-up use `union isfuzzy=true` instead of querying only one table?
+
+<details>
+<summary>KQL Answer</summary>
+
+Endpoint investigations usually need more than one evidence type. `DeviceProcessEvents` shows execution, `DeviceFileEvents` shows staged or deleted files, and `AlertEvidence` shows Defender verdicts. `union isfuzzy=true` lets students combine those tables even when the projected columns are not identical across every source.
+
+The teaching point: use `project` inside each branch to normalize the output columns, then `order by TimeGenerated asc` to turn separate tables into one readable timeline.
+
+</details>
 
 ## Catch It
 
@@ -151,6 +169,19 @@ The attacker tries to abuse the registry as a place where credential material ca
 
 Start with a file or script name, then pivot into alert evidence.
 
+## KQL Teaching Question
+
+When you know the suspicious script name, which KQL pattern helps you prove both file staging and Defender detection?
+
+<details>
+<summary>KQL Answer</summary>
+
+Use the script name as the anchor in more than one table. In this scenario, `FileName =~ "credentials_in_registry.ps1"` finds the staged file, while `AttackTechniques has_any ("Credentials in Registry", "T1552.002")` connects the behavior to the Defender/ATT&CK context.
+
+The teaching point: `=~` is a case-insensitive exact match, which is good when the filename is known. `has_any` is better for matching one of several alert or technique clues.
+
+</details>
+
 ## Catch It
 
 ```kusto
@@ -211,6 +242,19 @@ The attacker tries to copy the local SAM registry hive. The command line is the 
 
 Use `has_all` when multiple terms must appear together in the same command line.
 
+## KQL Teaching Question
+
+Why is `has_all ("reg save", "hklm\\sam")` stronger than only searching for `reg` or `sam`?
+
+<details>
+<summary>KQL Answer</summary>
+
+`reg` by itself is too broad, and `sam` by itself can appear in unrelated paths or names. `has_all` requires both clues to exist in the same command line, which makes the result much closer to the real behavior: saving the SAM registry hive.
+
+The teaching point: use `has_all` when the detection idea depends on a combination of words, not just one keyword.
+
+</details>
+
 ## Catch It
 
 ```kusto
@@ -269,6 +313,19 @@ The attacker goes after browser/WebCache data. PowerShell starts the script, and
 
 Follow parent and child process relationships with `InitiatingProcessCommandLine`.
 
+## KQL Teaching Question
+
+How does KQL show that `esentutl.exe` was part of the PowerShell browser-data collection chain?
+
+<details>
+<summary>KQL Answer</summary>
+
+Query both `FileName` and `InitiatingProcessCommandLine`. `FileName in~ ("powershell.exe", "esentutl.exe")` catches the parent and child process names, while `InitiatingProcessCommandLine has "collect_database_webcache.ps1"` ties the child process back to the script that launched it.
+
+The teaching point: parent process fields are pivot fields. They explain why a normal Windows binary appeared in the timeline.
+
+</details>
+
 ## Catch It
 
 ```kusto
@@ -314,6 +371,19 @@ The attacker stages Rubeus for Kerberoasting. Defender interrupts the move, but 
 ## KQL Idea
 
 A blocked tool may not produce a clean process execution row. Hunt file staging and `AlertEvidence`.
+
+## KQL Teaching Question
+
+If Defender blocks a tool before normal execution telemetry appears, which tables should students query first?
+
+<details>
+<summary>KQL Answer</summary>
+
+Start with `DeviceFileEvents` and `AlertEvidence`. `DeviceFileEvents` can show that `Rubeus.exe` was staged on disk. `AlertEvidence` can show the Defender verdict and ATT&CK mapping even if there is no clean `DeviceProcessEvents` execution row.
+
+The teaching point: absence of process execution is not absence of activity. Blocked tools often leave stronger evidence in file and alert tables.
+
+</details>
 
 ## Catch It
 
@@ -367,6 +437,19 @@ The attacker switches from a standalone executable to a PowerShell Kerberoasting
 
 Hunt script staging first, then pivot to alert evidence and ATT&CK context.
 
+## KQL Teaching Question
+
+Why does this query use `FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")` instead of an exact filename match?
+
+<details>
+<summary>KQL Answer</summary>
+
+This scenario stages more than one related PowerShell file. `has_any` lets the query catch both the wrapper script and the main Kerberoast script without writing separate filters for each filename.
+
+The teaching point: use `has_any` when a scenario may have several related artifact names and any one of them is enough to include the row.
+
+</details>
+
 ## Catch It
 
 ```kusto
@@ -418,6 +501,19 @@ The attacker tries to dump LSASS. A dump file lands in temp and Defender raises 
 ## KQL Idea
 
 Dump files are investigation gold. Hunt for `.dmp`, then connect the file to alert evidence.
+
+## KQL Teaching Question
+
+How can students find LSASS dump behavior even if the dump filename is random?
+
+<details>
+<summary>KQL Answer</summary>
+
+Look for file patterns and alert semantics instead of relying on one exact filename. `FileName endswith ".dmp"` catches dump files, while `Title has_any ("DumpLsass", "LSASS")` and `AttackTechniques has_any ("LSASS Memory", "T1003.001")` catch the Defender interpretation.
+
+The teaching point: random filenames are common, so hunt on file extension, path pattern, alert title, and ATT&CK technique.
+
+</details>
 
 ## Catch It
 
@@ -471,6 +567,19 @@ The attacker stages PwDump7. Defender prevents the hacktool, but students can st
 
 Use `AlertEvidence` for prevented tools and `DeviceFileEvents` for the staged artifact.
 
+## KQL Teaching Question
+
+What KQL evidence tells you the PwDump scenario was attempted but prevented?
+
+<details>
+<summary>KQL Answer</summary>
+
+Use a `union` of file and alert evidence. `DeviceFileEvents | where FileName has "pwdump"` shows the artifact, and `AlertEvidence | where Title has "PWDump"` shows Defender's prevention verdict.
+
+The teaching point: a prevented attack still produces useful telemetry. Teach students to read `Title`, `Severity`, and `FileName` together.
+
+</details>
+
 ## Catch It
 
 ```kusto
@@ -523,6 +632,19 @@ The attacker stages `gsecdump`. Defender does not necessarily call it by that ex
 
 Tool names and detection names do not always match. Hunt both the staged file name and alert title.
 
+## KQL Teaching Question
+
+Why should the query search for both `gsecdump` and `Vigorf`?
+
+<details>
+<summary>KQL Answer</summary>
+
+The tool name and the detection name are not always the same. `FileName has "gsecdump"` finds the staged artifact, while `Title has_any ("Vigorf", "malware")` catches how Defender classified the threat.
+
+The teaching point: do not assume the alert title will repeat the tool name. Pair artifact terms with detection-family terms.
+
+</details>
+
 ## Catch It
 
 ```kusto
@@ -573,6 +695,19 @@ The attacker stages LaZagne, a credential recovery tool. It appears and then get
 ## KQL Idea
 
 Use file events to catch both `FileCreated` and `FileDeleted` for the same suspicious artifact.
+
+## KQL Teaching Question
+
+How can KQL show that LaZagne was staged and then cleaned up?
+
+<details>
+<summary>KQL Answer</summary>
+
+Query `DeviceFileEvents` for `FileName has "lazagne"`, then keep `ActionType` in the projected output. Seeing both creation and deletion actions for the same artifact shows the tool lifecycle.
+
+The teaching point: include `ActionType` when hunting file artifacts. The action tells the story, not just the filename.
+
+</details>
 
 ## Catch It
 
@@ -626,6 +761,19 @@ The attacker uses a Mimikatz-style script rather than a simple `mimikatz.exe` ex
 
 When names are hidden or changed, hunt for script artifacts and Defender's credential-theft verdict.
 
+## KQL Teaching Question
+
+What makes the obfuscated Mimikatz query a better lesson than simply searching for `mimikatz.exe`?
+
+<details>
+<summary>KQL Answer</summary>
+
+The behavior is represented by a PowerShell script artifact, not a direct `mimikatz.exe` process. `FileName =~ "mimikatz_dump_passwords_v2.ps1"` catches the staged script, while `Title has "Mimikatz credential theft tool"` catches Defender's behavioral verdict.
+
+The teaching point: exact executable hunts are fragile. Combine artifact names with security product verdicts.
+
+</details>
+
 ## Catch It
 
 ```kusto
@@ -677,6 +825,19 @@ The attacker stages the classic Mimikatz package. This is the high-confidence sc
 ## KQL Idea
 
 Use obvious file names when available, but validate with alert evidence and hashes.
+
+## KQL Teaching Question
+
+When the filename is obvious, why should students still project `SHA256` and alert details?
+
+<details>
+<summary>KQL Answer</summary>
+
+An obvious filename is a clue, not full proof. Projecting `SHA256`, `Title`, and `Severity` gives students a durable indicator and the Defender verdict that explains why the artifact matters.
+
+The teaching point: finish a hunt by producing evidence another analyst can validate: filename, hash, alert title, severity, time, and device.
+
+</details>
 
 ## Catch It
 
