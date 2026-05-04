@@ -447,7 +447,7 @@ All 11 scenarios produced telemetry on `usm262346`.
 | # | Scenario | Primary lesson tables |
 |---|---|---|
 | 00 | Warm-Up: Rebuild the Attack Timeline | `DeviceProcessEvents`, `DeviceFileEvents`, `AlertEvidence` |
-| 01 | Credentials In Registry Script | `DeviceFileEvents`, `AlertEvidence` |
+| 01 | Credentials In Registry Script | `AlertEvidence` |
 | 02 | Dump SAM Registry Hive via `reg save` | `DeviceProcessEvents` |
 | 03 | Collect Browser Data via Esentutl and PowerShell | `DeviceProcessEvents` |
 | 04 | Kerberoasting using Rubeus | `DeviceFileEvents`, `AlertEvidence` |
@@ -623,53 +623,53 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ## KQL Skill
 
-Start with a file or script name, then pivot into alert evidence.
+Use `AlertEvidence` to connect the script filename to Defender's ATT&CK mapping.
 
 ## How To Think About The Query
 
-When you know the suspicious script name, which KQL pattern helps you prove both file staging and Defender detection?
+How can one alert-evidence query show the script filename and the ATT&CK technique together?
 
 <details>
 <summary>Break Down The KQL</summary>
 
-Use the script name as the anchor in more than one table. In this scenario, `FileName =~ "credentials_in_registry.ps1"` finds the staged file, while `AttackTechniques has_any ("Credentials in Registry", "T1552.002")` shows the ATT&CK technique Defender attached to it.
+Stay in `AlertEvidence` for this scenario. The challenge asks for Defender's ATT&CK mapping, and that mapping lives in the alert evidence row.
 
-Why this matters: `=~` is a case-insensitive exact match, which is good when the filename is known. `has_any` is better for matching one of several alert or technique clues.
+Why this matters: start with the Defender wording, look at the `FileName`, then keep that exact filename in the final query.
 
 ### Build The Hunt Step By Step
 
-Mission: find a PowerShell script related to credentials in the registry.
+Mission: find the PowerShell script and the ATT&CK technique from the same alert-evidence rows.
 
-First, find where script file activity lives:
-
-```kusto
-let TargetDevice = "usm262346";
-DeviceFileEvents
-| where Timestamp > ago(7d)
-| where DeviceName == TargetDevice
-| where FileName =~ "credentials_in_registry.ps1"
-| project Timestamp, FileName, FolderPath, ActionType
-```
-
-Why these columns: `FolderPath` shows where the script landed, and `ActionType` shows what file action happened. They are file-evidence columns, so they help you understand staging.
-
-Then pivot from file evidence to alert evidence:
+Step 1: start in `AlertEvidence` and search for the Defender wording. Keep the same output columns you will use in the answer.
 
 ```kusto
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
-| where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
-| where Title has_any ("PowerShell", "Registry", "Credentials")
-    or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
+| where DeviceName == TargetDevice
+| where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
 | project Timestamp, Title, FileName, AttackTechniques, SHA256
+| order by Timestamp asc
 ```
 
-Why the columns changed: the table changed. `FolderPath` and `ActionType` helped with file staging. `Title`, `AttackTechniques`, and `SHA256` help with the alert answer.
+Look at `FileName` in the results. That is where the exact script name appears.
 
-The full answer uses the alert query because the challenge asks for Defender's ATT&CK mapping. The file query is just the warm-up that helps you find the artifact.
+Step 2: keep the same query and add the exact filename you found.
 
-KQL logic to learn: use exact filename matching when the artifact name is known, then use `project` to keep only the columns that answer the CTF question.
+```kusto
+let TargetDevice = "usm262346";
+AlertEvidence
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice
+| where FileName =~ "credentials_in_registry.ps1"
+| where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
+| project Timestamp, Title, FileName, AttackTechniques, SHA256
+| order by Timestamp asc
+```
+
+What changed in step 2: only one line was added, `where FileName =~ "credentials_in_registry.ps1"`. The table, output columns, and sort stayed the same.
+
+KQL logic to learn: build the hunt one line at a time. First find the right alert rows, then lock the query to the exact filename.
 
 </details>
 
@@ -679,9 +679,9 @@ KQL logic to learn: use exact filename matching when the artifact name is known,
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
-| where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
-| where Title has_any ("PowerShell", "Registry", "Credentials")
-   or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
+| where DeviceName == TargetDevice
+| where FileName =~ "credentials_in_registry.ps1"
+| where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
 | project Timestamp, Title, FileName, AttackTechniques, SHA256
 | order by Timestamp asc
 ```
