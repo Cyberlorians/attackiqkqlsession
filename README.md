@@ -24,7 +24,7 @@ This lab is written for Microsoft Defender XDR Advanced Hunting. The XDR tables 
 |---|---|
 | `DeviceProcessEvents` | Process execution, command lines, parent processes, initiating users. |
 | `DeviceFileEvents` | Tool staging, scripts, zip files, dump files, cleanup. |
-| `AlertEvidence` | Defender alerts, prevented tools, MITRE mappings, file hashes. |
+| `AlertEvidence` | Defender verdicts, prevented tools, MITRE mappings, and alert-side file hashes. Use it when the question is about Defender's interpretation. |
 
 ## Learning Objectives
 
@@ -32,7 +32,7 @@ This lab is written for Microsoft Defender XDR Advanced Hunting. The XDR tables 
 - Filter a single workstation with `DeviceName == TargetDevice`.
 - Hunt process execution in `DeviceProcessEvents`.
 - Hunt staged tools and cleanup in `DeviceFileEvents`.
-- Use `AlertEvidence` to learn from blocked or prevented activity.
+- Use `AlertEvidence` only when the question needs Defender's verdict, prevention result, ATT&CK mapping, or alert-side hash.
 - Combine evidence with `union`, `project`, `order by`, `has`, `has_any`, and `has_all`.
 - Reconstruct attacker behavior from endpoint telemetry.
 
@@ -450,11 +450,11 @@ All 11 scenarios produced telemetry on `usm262346`.
 | 03 | Collect Browser Data via Esentutl and PowerShell | `DeviceProcessEvents`, `DeviceFileEvents` |
 | 04 | Kerberoasting using Rubeus | `DeviceFileEvents`, `AlertEvidence` |
 | 05 | Kerberoasting using PowerShell Empire Invoke-Kerberoast | `DeviceFileEvents`, `AlertEvidence` |
-| 06 | Dump LSASS Process to Minidump File | `DeviceFileEvents`, `AlertEvidence` |
+| 06 | Dump LSASS Process to Minidump File | `DeviceFileEvents`, optional `AlertEvidence` pivot |
 | 07 | Dump Passwords using PwDump7 | `DeviceFileEvents`, `AlertEvidence` |
 | 08 | Dump Passwords using gsecdump | `DeviceFileEvents`, `AlertEvidence` |
 | 09 | Dump Passwords using LaZagne | `DeviceFileEvents`, `AlertEvidence` |
-| 10 | Dump Windows Passwords with Obfuscated Mimikatz | `DeviceFileEvents`, `AlertEvidence` |
+| 10 | Dump Windows Passwords with Obfuscated Mimikatz | `DeviceFileEvents`, optional `AlertEvidence` pivot |
 | 11 | Dump Windows Passwords with Original Mimikatz | `DeviceFileEvents`, `AlertEvidence` |
 
 ---
@@ -638,29 +638,12 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ```kusto
 let TargetDevice = "usm262346";
-union isfuzzy=true
-(
-    DeviceProcessEvents
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where ProcessCommandLine has "credentials_in_registry.ps1"
-    | project Timestamp, EvidenceType="Process", FileName, Detail=ProcessCommandLine, AccountName, SHA256
-),
-(
-    DeviceFileEvents
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where FileName =~ "credentials_in_registry.ps1"
-    | project Timestamp, EvidenceType="File", FileName, Detail=FolderPath, AccountName=InitiatingProcessAccountName, SHA256
-),
-(
-    AlertEvidence
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
-    | where Title has_any ("PowerShell", "Registry", "Credentials")
-       or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
-    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
-)
+AlertEvidence
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
+| where Title has_any ("PowerShell", "Registry", "Credentials")
+   or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
+| project Timestamp, Title, FileName, AttackTechniques, SHA256
 | order by Timestamp asc
 ```
 
@@ -674,11 +657,11 @@ union isfuzzy=true
 
 ### How The KQL Finds It
 
-The answer comes from three beginner pivots:
+The answer comes from a focused alert-evidence query:
 
-1. `DeviceFileEvents` plus `FileName =~ "credentials_in_registry.ps1"` proves the script artifact existed.
-2. `DeviceProcessEvents` plus `ProcessCommandLine has "credentials_in_registry.ps1"` checks whether PowerShell tried to run it.
-3. `AlertEvidence` plus `AttackTechniques has_any ("Credentials in Registry", "T1552.002")` explains why Defender cared.
+1. `FileName =~ "credentials_in_registry.ps1"` keeps the known script artifact connected to the alert.
+2. `Title has_any (...)` catches Defender's PowerShell and credential wording.
+3. `AttackTechniques has_any ("Credentials in Registry", "T1552.002")` explains why Defender cared.
 
 Checkpoint: `FileName` tells you what the artifact was. `Title` and `AttackTechniques` tell you why it matters.
 
@@ -750,23 +733,12 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ```kusto
 let TargetDevice = "usm262346";
-union isfuzzy=true
-(
-    DeviceProcessEvents
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where FileName =~ "cmd.exe"
-    | where ProcessCommandLine has_all ("reg save", "hklm\\sam")
-    | project Timestamp, EvidenceType="Process", FileName, Detail=ProcessCommandLine, AccountName, SHA256
-),
-(
-    AlertEvidence
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where ProcessCommandLine has_all ("reg save", "hklm\\sam")
-       or Title has "RegistryExfil"
-    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", ProcessCommandLine, " | ", AttackTechniques), AccountName, SHA256
-)
+DeviceProcessEvents
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice
+| where FileName =~ "cmd.exe"
+| where ProcessCommandLine has_all ("reg save", "hklm\\sam")
+| project Timestamp, DeviceName, AccountName, FileName, ProcessCommandLine
 | order by Timestamp asc
 ```
 
@@ -792,7 +764,7 @@ The important beginner logic is the command-line filter:
 
 Read it as: keep only process rows where the command line contains both clues. `reg save` tells us the registry was being exported. `hklm\sam` tells us the SAM hive was the target.
 
-Then `project Timestamp, FileName, Detail=ProcessCommandLine` keeps the columns needed to answer: when it happened, which process ran, and the exact command.
+Then `project Timestamp, DeviceName, AccountName, FileName, ProcessCommandLine` keeps the columns needed to answer: when it happened, where it happened, who ran it, which process ran, and the exact command.
 
 </details>
 
@@ -1065,22 +1037,12 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ```kusto
 let TargetDevice = "usm262346";
-union isfuzzy=true
-(
-    DeviceFileEvents
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")
-    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
-),
-(
-    AlertEvidence
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice or FileName has "invoke-kerberoast"
-    | where FileName has "invoke-kerberoast" or AttackTechniques has_any ("Kerberoasting", "T1558.003")
-    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
-)
-| order by Timestamp asc
+DeviceFileEvents
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice
+| where FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")
+| summarize FirstSeen=min(Timestamp), LastSeen=max(Timestamp), Actions=make_set(ActionType) by FileName, FolderPath, SHA256
+| order by FileName asc
 ```
 
 
@@ -1101,7 +1063,7 @@ The query uses a list because there are two related script names:
 
 Read it as: keep rows where the filename has either of those terms. That is useful when a scenario uses a launcher script and a payload script.
 
-Then the `AlertEvidence` branch uses the same keyword family to connect the script to Defender's Kerberoasting context.
+Then `summarize` rolls multiple file events into one row per file, showing first seen, last seen, and which file actions occurred.
 
 Checkpoint: `has_any` is for "any one of these clues is enough."
 
@@ -1120,7 +1082,7 @@ The attacker tries to dump LSASS. A dump file lands in temp and Defender raises 
 
 ## KQL Skill
 
-Dump files are investigation gold. Hunt for `.dmp`, then connect the file to alert evidence.
+Dump files are investigation gold. Hunt for `.dmp`, then optionally pivot to alert evidence for the ATT&CK mapping.
 
 ## How To Think About The Query
 
@@ -1173,21 +1135,11 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ```kusto
 let TargetDevice = "usm262346";
-union isfuzzy=true
-(
-    DeviceFileEvents
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where FileName endswith ".dmp" or FolderPath has "pid_"
-    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
-),
-(
-    AlertEvidence
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where Title has_any ("DumpLsass", "LSASS") or AttackTechniques has_any ("LSASS Memory", "T1003.001")
-    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", ProcessCommandLine, " | ", AttackTechniques), AccountName, SHA256
-)
+DeviceFileEvents
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice
+| where FileName endswith ".dmp" or FolderPath has "pid_"
+| project Timestamp, ActionType, FileName, FolderPath, SHA256
 | order by Timestamp asc
 ```
 
@@ -1205,8 +1157,8 @@ This scenario teaches pattern hunting when filenames are random:
 
 1. `FileName endswith ".dmp"` finds dump files without knowing the full filename.
 2. `FolderPath has "pid_"` catches the AttackIQ-style dump path pattern.
-3. `Title has_any ("DumpLsass", "LSASS")` searches the Defender alert language.
-4. `AttackTechniques has_any ("LSASS Memory", "T1003.001")` ties the alert to the ATT&CK sub-technique.
+3. `project Timestamp, ActionType, FileName, FolderPath, SHA256` keeps the file evidence readable.
+4. The step-by-step `AlertEvidence` query provides the ATT&CK mapping: `LSASS Memory (T1003.001)`.
 
 Checkpoint: random names require pattern logic. Extensions, folders, titles, and ATT&CK fields are all clues.
 
@@ -1225,7 +1177,7 @@ The attacker stages PwDump7. Defender prevents the hacktool, but you can still p
 
 ## KQL Skill
 
-Use `AlertEvidence` for prevented tools and `DeviceFileEvents` for the staged artifact.
+Use `AlertEvidence` to read the prevention verdict, then shape that verdict with `extend`.
 
 ## How To Think About The Query
 
@@ -1234,9 +1186,9 @@ What KQL evidence tells you the PwDump scenario was attempted but prevented?
 <details>
 <summary>Break Down The KQL</summary>
 
-Use a `union` of file and alert evidence. `DeviceFileEvents | where FileName has "pwdump"` shows the artifact, and `AlertEvidence | where Title has "PWDump"` shows Defender's prevention verdict.
+Use `AlertEvidence` when the important question is outcome. `Title has "PWDump"` finds Defender's prevention verdict, and `extend` can turn that wording into a simple `Outcome` column.
 
-Why this matters: a prevented attack still produces useful telemetry. Read `Title`, `Severity`, and `FileName` together.
+Why this matters: a prevented attack still produces useful telemetry. Read `Title`, `Severity`, `Outcome`, and `FileName` together.
 
 </details>
 
@@ -1278,21 +1230,12 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ```kusto
 let TargetDevice = "usm262346";
-union isfuzzy=true
-(
-    DeviceFileEvents
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where FileName has "pwdump"
-    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
-),
-(
-    AlertEvidence
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice or FileName has "pwdump"
-    | where Title has "PWDump" or FileName has "pwdump"
-    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
-)
+AlertEvidence
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice or FileName has "pwdump"
+| where Title has "PWDump" or FileName has "pwdump"
+| extend Outcome = iff(Title has "prevented", "Prevented", "Review")
+| project Timestamp, Outcome, Title, Severity, FileName, SHA256
 | order by Timestamp asc
 ```
 
@@ -1308,9 +1251,9 @@ union isfuzzy=true
 
 The answer comes from comparing file evidence with alert evidence:
 
-1. `DeviceFileEvents | where FileName has "pwdump"` finds the staged artifact.
-2. `AlertEvidence | where Title has "PWDump"` finds Defender's verdict.
-3. `project Timestamp, EvidenceType, FileName, Detail` keeps the result readable.
+1. `AlertEvidence | where Title has "PWDump"` finds Defender's verdict.
+2. `extend Outcome = iff(...)` turns the alert wording into a simple outcome column.
+3. `project Timestamp, Outcome, Title, Severity, FileName, SHA256` keeps the result readable.
 
 The word `prevented` in the alert title matters. It tells you this was an attempted credential dump, not clean execution.
 
@@ -1368,7 +1311,7 @@ let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName has "gsecdump"
-| where FileName has "gsecdump" or Title has_any ("Vigorf", "malware")
+| where FileName has "gsecdump" or Title has "Vigorf"
 | project Timestamp, Title, Severity, FileName
 ```
 
@@ -1384,21 +1327,11 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ```kusto
 let TargetDevice = "usm262346";
-union isfuzzy=true
-(
-    DeviceFileEvents
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where FileName has "gsecdump"
-    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
-),
-(
-    AlertEvidence
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice or FileName has "gsecdump"
-    | where FileName has "gsecdump" or Title has_any ("Vigorf", "malware")
-    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
-)
+AlertEvidence
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice or FileName has "gsecdump"
+| where FileName has "gsecdump" or Title has "Vigorf"
+| project Timestamp, Title, Severity, FileName, SHA256
 | order by Timestamp asc
 ```
 
@@ -1414,7 +1347,7 @@ union isfuzzy=true
 This is a naming lesson:
 
 1. `FileName has "gsecdump"` finds what AttackIQ staged.
-2. `Title has_any ("Vigorf", "malware")` finds what Defender called it.
+2. `Title has "Vigorf"` finds what Defender called it.
 3. Seeing both in the same time window connects the artifact name to the detection name.
 
 Checkpoint: do not expect the alert title to repeat your search term. Defender may use a malware family or detection family name.
@@ -1488,22 +1421,12 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ```kusto
 let TargetDevice = "usm262346";
-union isfuzzy=true
-(
-    DeviceFileEvents
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where FileName has "lazagne"
-    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
-),
-(
-    AlertEvidence
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice or FileName has "lazagne"
-    | where FileName has "lazagne" or AttackTechniques has_any ("Credentials from Password Stores", "T1555")
-    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
-)
-| order by Timestamp asc
+DeviceFileEvents
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice
+| where FileName has "lazagne"
+| summarize Actions=make_set(ActionType), FirstSeen=min(Timestamp), LastSeen=max(Timestamp), Paths=make_set(FolderPath) by FileName, SHA256
+| order by FirstSeen asc
 ```
 
 
@@ -1521,7 +1444,7 @@ This scenario teaches file lifecycle:
 1. `FileName has "lazagne"` finds all file events for the tool.
 2. `project Timestamp, ActionType, FileName, FolderPath` keeps the lifecycle visible.
 3. `order by Timestamp asc` shows creation before deletion.
-4. Optional: `summarize Actions=make_set(ActionType) by FileName` rolls multiple rows into one answer.
+4. `summarize Actions=make_set(ActionType)` rolls multiple rows into one answer.
 
 Checkpoint: `ActionType` is the column that tells you whether the file was created, deleted, or changed.
 
@@ -1540,7 +1463,7 @@ The attacker uses a Mimikatz-style script rather than a simple `mimikatz.exe` ex
 
 ## KQL Skill
 
-When names are hidden or changed, hunt for script artifacts and Defender's credential-theft verdict.
+When names are hidden or changed, hunt for script artifacts first. Pivot to Defender's verdict only after the artifact is found.
 
 ## How To Think About The Query
 
@@ -1593,21 +1516,11 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ```kusto
 let TargetDevice = "usm262346";
-union isfuzzy=true
-(
-    DeviceFileEvents
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where FileName =~ "mimikatz_dump_passwords_v2.ps1"
-    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
-),
-(
-    AlertEvidence
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice or FileName =~ "mimikatz_dump_passwords_v2.ps1"
-    | where FileName =~ "mimikatz_dump_passwords_v2.ps1" or Title has "Mimikatz credential theft tool"
-    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
-)
+DeviceFileEvents
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice
+| where FileName =~ "mimikatz_dump_passwords_v2.ps1"
+| project Timestamp, ActionType, FileName, FolderPath, SHA256
 | order by Timestamp asc
 ```
 
@@ -1624,8 +1537,8 @@ union isfuzzy=true
 This scenario teaches why process names are not enough:
 
 1. `FileName =~ "mimikatz_dump_passwords_v2.ps1"` catches the script artifact.
-2. `Title has "Mimikatz credential theft tool"` catches Defender's behavior verdict.
-3. `or FileName =~ ...` in the alert branch keeps the search connected to the artifact even when `DeviceName` is missing or sparse in alert evidence.
+2. `DeviceFileEvents` shows the suspicious script even when there is no `mimikatz.exe` process name to search for.
+3. The step-by-step `AlertEvidence` query catches Defender's behavior verdict after the artifact is found.
 
 Checkpoint: a Mimikatz detection can come from a script, zip, command, memory behavior, or tool verdict. Do not rely only on `mimikatz.exe`.
 
@@ -1697,21 +1610,11 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ```kusto
 let TargetDevice = "usm262346";
-union isfuzzy=true
-(
-    DeviceFileEvents
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice
-    | where FileName =~ "mimikatz-x64.zip"
-    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
-),
-(
-    AlertEvidence
-    | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
-    | where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
-    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
-)
+AlertEvidence
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
+| where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
+| project Timestamp, DeviceName, Title, Severity, FileName, SHA256
 | order by Timestamp asc
 ```
 
