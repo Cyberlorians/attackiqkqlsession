@@ -54,6 +54,9 @@ For every mini-query, paste the shared scope block first unless it is already in
 let TargetDevice = "usm262346";
 ```
 
+<details open>
+<summary><strong>KQL 101: How To Read These Queries</strong></summary>
+
 ## KQL 101: How To Read These Queries
 
 KQL reads from top to bottom. Think of each line as one instruction in a recipe.
@@ -85,6 +88,11 @@ How to read it:
 - `order by`: sort results so the story is easier to read.
 
 Beginner habit: every answer should prove four things when possible: **when**, **where**, **what**, and **why it matters**.
+
+</details>
+
+<details open>
+<summary><strong>Pre-CTF KQL Refresher</strong></summary>
 
 ## Pre-CTF KQL Refresher
 
@@ -321,6 +329,8 @@ Before opening Scenario 01, have students answer these quick questions:
 
 </details>
 
+</details>
+
 ## Run Context
 
 | Field | Value |
@@ -332,6 +342,101 @@ Before opening Scenario 01, have students answer these quick questions:
 | Runtime path | `C:\Users\xadmin\Downloads\.ghostex-cli-wd-2170286878` |
 | Orchestrator | `python.exe` running `attack_graph.py` |
 | Validation window | `2026-05-04T13:10:00Z` to `2026-05-04T13:20:00Z` |
+
+<details>
+<summary><strong>Instructor Notes: How To Run The Session</strong></summary>
+
+## Instructor Notes
+
+Use the incident only as an optional story hook. Do not make the class depend on a specific incident ID, because the customer tenant may group the AttackIQ activity differently or may not have the same incident at all.
+
+Recommended teaching flow:
+
+1. Start with **KQL 101** and the **Pre-CTF KQL Refresher**.
+2. Set the shared target device variable.
+3. Run the warm-up timeline so students see the activity cluster.
+4. Open each scenario in order.
+5. Have students run **Build It Slowly** first.
+6. Ask **Your CTF Challenge**.
+7. Use **Full Hunt Query** only when students need a nudge or want to check their work.
+8. Open **Answer Key** last.
+
+What to say if students get lost:
+
+- "Which table should have this evidence: process, file, or alert?"
+- "Which column tells us the command?"
+- "Which column tells us the Defender verdict?"
+- "Can we reduce noise with `where DeviceName == TargetDevice`?"
+- "Can we prove when, where, what, and why it matters?"
+
+Time guidance:
+
+- Student queries use `Timestamp > ago(7d)` to keep things simple.
+- The original validation window was `2026-05-04T13:10:00Z` to `2026-05-04T13:20:00Z`.
+- If the class has too many rows, tighten the time filter during delivery.
+
+Example tighter filter:
+
+```kusto
+| where Timestamp between (datetime(2026-05-04T13:10:00Z) .. datetime(2026-05-04T13:20:00Z))
+```
+
+</details>
+
+<details>
+<summary><strong>Optional Instructor Pivot: If The Customer Has An XDR Incident</strong></summary>
+
+## Optional XDR Incident Pivot
+
+Use this only if the customer has an incident that clearly contains the AttackIQ run. If not, skip it. The lab still works because every scenario is based on endpoint telemetry in Advanced Hunting.
+
+Why it is optional:
+
+- Incident IDs are tenant-specific.
+- Alert grouping can vary by tenant, policy, product, and timing.
+- Some scenarios are prevented before they produce a clean process row, so the incident may show only part of the story.
+- The safest student path is still: target workstation -> endpoint tables -> evidence.
+
+If you do have an incident, use it as a launch point:
+
+1. Open the XDR incident in the portal.
+2. Note the affected device, user, alert titles, and rough time range.
+3. Confirm the target device matches the lab workstation.
+4. Pivot from the incident into Advanced Hunting.
+5. Continue with the same scenario flow in this guide.
+
+Optional query when `IncidentId` is available in your XDR hunting schema:
+
+```kusto
+let IncidentIdToReview = "PUT-INCIDENT-ID-HERE";
+AlertInfo
+| where Timestamp > ago(7d)
+| where IncidentId == IncidentIdToReview
+| project Timestamp, IncidentId, AlertId, Title, Severity, ServiceSource, DetectionSource, AttackTechniques
+| order by Timestamp asc
+```
+
+Pivot from incident alerts to evidence:
+
+```kusto
+let IncidentIdToReview = "PUT-INCIDENT-ID-HERE";
+let IncidentAlerts =
+    AlertInfo
+    | where Timestamp > ago(7d)
+    | where IncidentId == IncidentIdToReview
+    | project AlertId, IncidentId, AlertTitle=Title, Severity;
+IncidentAlerts
+| join kind=inner (
+    AlertEvidence
+    | where Timestamp > ago(7d)
+) on AlertId
+| project Timestamp, IncidentId, AlertTitle, Severity, EntityType, DeviceName, FileName, ProcessCommandLine, SHA256
+| order by Timestamp asc
+```
+
+Instructor note: if the incident query does not return results, do not troubleshoot the incident during class. Move back to the device-scoped scenario queries and say: "Incidents are a helpful doorway, but endpoint telemetry is the ground truth for this lab."
+
+</details>
 
 ## Scenario Coverage
 
