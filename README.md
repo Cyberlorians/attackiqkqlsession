@@ -1,18 +1,22 @@
 # AttackIQ Scenario: Security Control Baseline - Endpoint EDR
 
-This is a Microsoft Defender XDR Advanced Hunting KQL lab built from an authorized AttackIQ `Security Control Baseline - Endpoint EDR` run. The goal is not just to copy finished queries. The goal is to think like a hunter: start with one workstation, find clues, pivot across tables, and explain what happened.
+Microsoft Defender XDR Advanced Hunting lab for an authorized AttackIQ `Security Control Baseline - Endpoint EDR` run. The story is simple: a simulated attacker ran credential-access activity on one workstation, and your job is to catch each move with KQL.
 
-The story: a simulated attacker ran a fast credential-access sequence on one workstation. Your job is to catch each move with KQL.
-
-## Scope
-
-All hunts are intentionally scoped to the workstation where AttackIQ ran. This keeps the lesson realistic for a customer environment where only the test workstation is in scope. To keep the beginner queries easy, the examples use the last 7 days. Instructors can tighten the time later if needed.
+Use this target device in every scenario:
 
 ```kusto
 let TargetDevice = "usm262346";
 ```
 
-This lab is written for Microsoft Defender XDR Advanced Hunting. The XDR tables in this lesson use `Timestamp` for time filtering:
+<details>
+<summary><strong>Quick Reference: Scope, Tables, And Flow</strong></summary>
+
+## Scope
+
+- Product: Microsoft Defender XDR Advanced Hunting.
+- Target workstation: `usm262346`.
+- Beginner time filter: `Timestamp > ago(7d)`.
+- Time column: `Timestamp`.
 
 ```kusto
 | where Timestamp > ago(7d)
@@ -26,37 +30,30 @@ This lab is written for Microsoft Defender XDR Advanced Hunting. The XDR tables 
 | `DeviceFileEvents` | Tool staging, scripts, zip files, dump files, cleanup. |
 | `AlertEvidence` | Defender verdicts, prevented tools, MITRE mappings, and alert-side file hashes. Use it when the question is about Defender's interpretation. |
 
-## Learning Objectives
+## What Students Practice
 
-- Use `let` statements to control the target workstation.
-- Filter a single workstation with `DeviceName == TargetDevice`.
-- Hunt process execution in `DeviceProcessEvents`.
-- Hunt staged tools and cleanup in `DeviceFileEvents`.
-- Use `AlertEvidence` only when the question needs Defender's verdict, prevention result, ATT&CK mapping, or alert-side hash.
-- Combine evidence with `union`, `project`, `order by`, `has`, `has_any`, and `has_all`.
-- Reconstruct attacker behavior from endpoint telemetry.
+- Scope to one workstation with `DeviceName == TargetDevice`.
+- Hunt processes, files, and alerts in the right table.
+- Build queries one line at a time.
+- Keep final answer columns consistent with the step-by-step query.
+- Use `union`, `project`, `order by`, `has`, `has_any`, `has_all`, `summarize`, and `extend`.
 
 Each scenario follows the same learner-friendly flow:
 
-- What happened: the attacker story in plain English.
-- Your challenge: the question to answer from the data.
-- KQL skill: the table, column, or operator that matters.
-- How to think about the query: the hunting idea before the syntax.
-- Break down the KQL: the explanation and small query pieces to run first.
-- Full answer query: the complete check-your-work query.
-- Answer key: the final answer plus how the KQL found it.
+- **What Happened**: plain-English attacker story.
+- **Your Challenge**: what students need to answer.
+- **KQL Skill**: table, column, or operator to learn.
+- **How To Think About The Query**: the hunting idea before the syntax.
+- **Break Down The KQL**: small query steps.
+- **Full Answer And Explanation**: final query, answer, and why it works.
 
-In other words: understand the move, read the challenge, practice the KQL, then check your answer.
-
-For every mini-query, paste the shared scope block first unless it is already included:
-
-```kusto
-let TargetDevice = "usm262346";
-```
+In other words: understand the move, read the challenge, build the query, then check the answer.
 
 When a step-by-step query changes columns, the question changed too. File rows usually need `FolderPath` and `ActionType`. Alert rows usually need `Title`, `AttackTechniques`, or `Severity`. If a column matters later, the practice query should keep it or explain why it changed.
 
-<details open>
+</details>
+
+<details>
 <summary><strong>KQL 101: How To Read These Queries</strong></summary>
 
 ## KQL 101: How To Read These Queries
@@ -89,16 +86,16 @@ How to read it:
 - `summarize`: group rows into counts or rollups.
 - `order by`: sort results so the story is easier to read.
 
-Beginner habit: every answer should prove four things when possible: **when**, **where**, **what**, and **why it matters**.
+Beginner habit: prove **when**, **where**, **what**, and **why it matters** when the data allows it.
 
 </details>
 
-<details open>
+<details>
 <summary><strong>Pre-CTF KQL Refresher</strong></summary>
 
 ## Pre-CTF KQL Refresher
 
-Before the CTF starts, practice the handful of KQL moves they will use over and over. This is the warm-up gym. Keep it light, fast, and interactive.
+Practice these KQL moves before starting the scenarios.
 
 ### Query Construction Flow
 
@@ -128,7 +125,7 @@ What each stage means:
 | Analyze or pivot | `summarize`, parent columns, hashes, alerts | What pattern or next clue appears? |
 | Present evidence | `project`, `order by` | What columns prove my answer? |
 
-Quick note: do not try to write the perfect query first. Start messy, filter down, then clean up the output.
+Quick note: do not write the perfect query first. Start broad, filter down, then clean up the output.
 
 ### Refresher 1: Filtering With `where`
 
@@ -333,6 +330,9 @@ Before opening Scenario 01, answer these quick questions:
 
 </details>
 
+<details>
+<summary><strong>Run Context And Scenario Coverage</strong></summary>
+
 ## Run Context
 
 | Field | Value |
@@ -360,8 +360,7 @@ Recommended teaching flow:
 4. Open each scenario in order.
 5. Read **What Happened** and **Your Challenge**.
 6. Open **Break Down The KQL** when students are ready to build the hunt.
-7. Use **Full Answer Query** only when students need a nudge or want to check their work.
-8. Open **Answer Key** last.
+7. Open **Full Answer And Explanation** only when students need a nudge or want to check their work.
 
 What to say if students get lost:
 
@@ -459,6 +458,8 @@ All 11 scenarios produced telemetry on `usm262346`.
 | 10 | Dump Windows Passwords with Obfuscated Mimikatz | `DeviceFileEvents` |
 | 11 | Dump Windows Passwords with Original Mimikatz | `DeviceFileEvents`, `AlertEvidence` |
 
+</details>
+
 ---
 
 <details open>
@@ -472,7 +473,7 @@ Before chasing individual scenarios, rebuild the attacker timeline. This shows w
 
 What launched the attack, what account ran it, and where did the AttackIQ runtime unpack itself?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -548,7 +549,10 @@ Checkpoint: all three practice queries now output `Timestamp`, `EvidenceType`, `
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -582,8 +586,6 @@ union isfuzzy=true
 | order by Timestamp asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - Launcher: `SecBase_security-control-baseline-endpoint-edr_V1_0_51_amd64_gui-sig.exe`
 - Account: `xadmin`
@@ -619,7 +621,7 @@ The attacker tries to abuse the registry as a place where credential material ca
 
 What is the exact PowerShell script filename, and which ATT&CK technique did Defender attach to it?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -676,7 +678,7 @@ KQL logic to learn: build the hunt one line at a time. First find the right aler
 <details>
 <summary>Full Answer And Explanation</summary>
 
-Step 2 is the full answer query. It is repeated here so you can check your work.
+Step 2 is the final query. It is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -720,7 +722,7 @@ The attacker tries to copy the local SAM registry hive. The command line is the 
 
 Where did the attacker try to save the SAM hive?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -770,7 +772,10 @@ KQL logic to learn: `has_all` is for "both of these clues must be present." That
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -783,8 +788,6 @@ DeviceProcessEvents
 | order by Timestamp asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 The command line shows:
 
@@ -823,7 +826,7 @@ The attacker goes after browser/WebCache data. PowerShell starts the script, and
 
 Which process launched `esentutl.exe`, and what browser/cache path was targeted?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -875,7 +878,10 @@ KQL logic to learn: `InitiatingProcessFileName` and `InitiatingProcessCommandLin
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -890,8 +896,6 @@ DeviceProcessEvents
 | order by Timestamp asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - Parent process: `powershell.exe`
 - Script: `collect_database_webcache.ps1`
@@ -926,7 +930,7 @@ The attacker stages Rubeus for Kerberoasting. Defender interrupts the move, but 
 
 What file name and hash identify the Rubeus attempt?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -979,7 +983,10 @@ KQL logic to learn: when the process table is quiet, check file and alert tables
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1001,8 +1008,6 @@ union isfuzzy=true
 | order by Timestamp asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - File: `Rubeus.exe`
 - Hash: `1e1fe8a1730bf8caabd867fd2f990b0e52aee0f9f8635578ff8b18c0950b616c`
@@ -1035,7 +1040,7 @@ The attacker switches from a standalone executable to a PowerShell Kerberoasting
 
 Which two PowerShell files were staged for the Kerberoasting test?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -1084,7 +1089,10 @@ KQL logic to learn: `has` is good for one clue. `has_any` is good when several r
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1096,8 +1104,6 @@ DeviceFileEvents
 | order by FileName asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - `call-invoke-kerberoast.ps1`
 - `invoke-kerberoast.ps1`
@@ -1134,7 +1140,7 @@ The attacker tries to dump LSASS. A dump file lands in temp with a generated nam
 
 What dump file was created, and where did it land?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -1183,7 +1189,10 @@ KQL logic to learn: use `endswith` for extensions, and use folder patterns when 
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1195,8 +1204,6 @@ DeviceFileEvents
 | order by Timestamp asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - Dump file: `pid_976_2ztj_d6a.dmp`
 - File path clue: a temp path containing `pid_`
@@ -1229,7 +1236,7 @@ The attacker stages PwDump7. Defender prevents the hacktool, but you can still p
 
 Was PwDump executed cleanly, or was it prevented? What tells you?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -1283,7 +1290,10 @@ KQL logic to learn: `Title` often tells you the outcome. Words like `prevented` 
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1296,8 +1306,6 @@ AlertEvidence
 | order by Timestamp asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - Artifact: `pwdump7.zip`
 - Defender alert: `'PWDump' hacktool was prevented`
@@ -1332,7 +1340,7 @@ The attacker stages `gsecdump`. Defender does not necessarily call it by that ex
 
 What did Defender call the threat, and what was the actual staged file name?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -1381,7 +1389,10 @@ KQL logic to learn: one table may show the attacker tool name while another tabl
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1393,8 +1404,6 @@ AlertEvidence
 | order by Timestamp asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - Staged file: `gsecdump-0.7-win32.zip`
 - Defender alert: `'Vigorf' malware was prevented`
@@ -1426,7 +1435,7 @@ The attacker stages LaZagne, a credential recovery tool. It appears and then get
 
 How do we know the tool was cleaned up after staging?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -1474,7 +1483,10 @@ KQL logic to learn: `summarize` turns many rows into one answer. `ActionType` be
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1486,8 +1498,6 @@ DeviceFileEvents
 | order by FirstSeen asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - Artifact: `laZagne_windows_x64.exe`
 - Evidence: the file was created and later deleted.
@@ -1521,7 +1531,7 @@ The attacker uses a Mimikatz-style script rather than a simple `mimikatz.exe` ex
 
 What makes this hunt different from simply looking for `mimikatz.exe`?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -1570,7 +1580,10 @@ KQL logic to learn: when tools are renamed, obfuscated, or wrapped in scripts, s
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1582,8 +1595,6 @@ DeviceFileEvents
 | order by Timestamp asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - Artifact: `mimikatz_dump_passwords_v2.ps1`
 - `SHA256` is included for follow-up evidence.
@@ -1616,7 +1627,7 @@ The attacker stages the classic Mimikatz package. This is the obvious Mimikatz s
 
 Which Mimikatz artifact was blocked, and what hash identifies it in alert evidence?
 
-Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
+Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
 
 ## KQL Skill
 
@@ -1667,7 +1678,10 @@ KQL logic to learn: a good hunt answer includes the thing, the verdict, the hash
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+The final query is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1679,8 +1693,6 @@ AlertEvidence
 | order by Timestamp asc
 ```
 
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - Artifact: `mimikatz-x64.zip`
 - Defender verdict: `Mimikatz credential theft tool`
