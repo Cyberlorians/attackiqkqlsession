@@ -54,6 +54,8 @@ For every mini-query, paste the shared scope block first unless it is already in
 let TargetDevice = "usm262346";
 ```
 
+When a step-by-step query changes columns, it is changing the question. Early queries often keep orientation columns such as `FolderPath` and `ActionType` so you can see where a file lived and what happened to it. Later queries keep answer columns such as `Title`, `AttackTechniques`, `Severity`, or `SHA256` so you can explain the security meaning. The column list should always match the question being answered in that moment.
+
 <details open>
 <summary><strong>KQL 101: How To Read These Queries</strong></summary>
 
@@ -442,19 +444,19 @@ Instructor note: if the incident query does not return results, do not troublesh
 
 All 11 scenarios produced telemetry on `usm262346`.
 
-| # | Scenario | Best evidence tables |
+| # | Scenario | Primary lesson tables |
 |---|---|---|
 | 00 | Warm-Up: Rebuild the Attack Timeline | `DeviceProcessEvents`, `DeviceFileEvents`, `AlertEvidence` |
-| 01 | Credentials In Registry Script | `DeviceProcessEvents`, `DeviceFileEvents`, `AlertEvidence` |
-| 02 | Dump SAM Registry Hive via `reg save` | `DeviceProcessEvents`, `AlertEvidence` |
-| 03 | Collect Browser Data via Esentutl and PowerShell | `DeviceProcessEvents`, `DeviceFileEvents` |
+| 01 | Credentials In Registry Script | `DeviceFileEvents`, `AlertEvidence` |
+| 02 | Dump SAM Registry Hive via `reg save` | `DeviceProcessEvents` |
+| 03 | Collect Browser Data via Esentutl and PowerShell | `DeviceProcessEvents` |
 | 04 | Kerberoasting using Rubeus | `DeviceFileEvents`, `AlertEvidence` |
-| 05 | Kerberoasting using PowerShell Empire Invoke-Kerberoast | `DeviceFileEvents`, `AlertEvidence` |
-| 06 | Dump LSASS Process to Minidump File | `DeviceFileEvents`, optional `AlertEvidence` pivot |
+| 05 | Kerberoasting using PowerShell Empire Invoke-Kerberoast | `DeviceFileEvents` |
+| 06 | Dump LSASS Process to Minidump File | `DeviceFileEvents` |
 | 07 | Dump Passwords using PwDump7 | `DeviceFileEvents`, `AlertEvidence` |
 | 08 | Dump Passwords using gsecdump | `DeviceFileEvents`, `AlertEvidence` |
-| 09 | Dump Passwords using LaZagne | `DeviceFileEvents`, `AlertEvidence` |
-| 10 | Dump Windows Passwords with Obfuscated Mimikatz | `DeviceFileEvents`, optional `AlertEvidence` pivot |
+| 09 | Dump Passwords using LaZagne | `DeviceFileEvents` |
+| 10 | Dump Windows Passwords with Obfuscated Mimikatz | `DeviceFileEvents` |
 | 11 | Dump Windows Passwords with Original Mimikatz | `DeviceFileEvents`, `AlertEvidence` |
 
 ---
@@ -619,6 +621,8 @@ DeviceFileEvents
 | project Timestamp, FileName, FolderPath, ActionType
 ```
 
+Why these columns: `FolderPath` shows where the script landed, and `ActionType` shows what file action happened. They are file-evidence columns, so they help you understand staging.
+
 Then pivot from file evidence to security meaning:
 
 ```kusto
@@ -628,6 +632,8 @@ AlertEvidence
 | where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
 | project Timestamp, Title, AttackTechniques, FileName
 ```
+
+Why the columns changed: this query moved from `DeviceFileEvents` to `AlertEvidence`. `FolderPath` and `ActionType` answered the file-staging question; `Title` and `AttackTechniques` answer the security-meaning question. The full answer also adds `SHA256` because a hash is useful evidence once you know the row matters.
 
 KQL logic to learn: use exact filename matching when the artifact name is known, then use `project` to keep only the columns that answer the CTF question.
 
@@ -911,6 +917,8 @@ DeviceFileEvents
 | project Timestamp, FileName, FolderPath, ActionType, SHA256
 ```
 
+Why these columns: `FolderPath` and `ActionType` prove the file was staged, while `SHA256` gives you the durable file identifier.
+
 Then ask Defender what it thought the file meant:
 
 ```kusto
@@ -920,6 +928,8 @@ AlertEvidence
 | where DeviceName == TargetDevice or FileName =~ "Rubeus.exe"
 | project Timestamp, Title, AttackTechniques, FileName, SHA256
 ```
+
+Why the columns changed: the second query is no longer asking where the file was written. It is asking how Defender classified it, so `Title` and `AttackTechniques` become the important columns.
 
 KQL logic to learn: when the process table is quiet, check file and alert tables before deciding nothing happened.
 
@@ -1024,6 +1034,8 @@ DeviceFileEvents
 | project Timestamp, FileName, FolderPath, ActionType
 ```
 
+Why the full answer looks different: the step queries show individual file events. The full answer uses `summarize` to roll those events into one row per artifact, so `ActionType` becomes the `Actions` set.
+
 KQL logic to learn: `has` is good for one clue. `has_any` is good when several related clue words can identify the same scenario.
 
 </details>
@@ -1072,17 +1084,17 @@ Checkpoint: `has_any` is for "any one of these clues is enough."
 
 ## What Happened
 
-The attacker tries to dump LSASS. A dump file lands in temp and Defender raises a `DumpLsass` prevention alert.
+The attacker tries to dump LSASS. A dump file lands in temp with a generated name, so the filename is not obvious at first glance.
 
 ## Your Challenge
 
-What dump file was created, and what ATT&CK sub-technique did the alert map to?
+What dump file was created, where did it land, and what hash identifies it?
 
 Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
 ## KQL Skill
 
-Dump files are investigation gold. Hunt for `.dmp`, then optionally pivot to alert evidence for the ATT&CK mapping.
+Dump files are investigation gold. Hunt for `.dmp`, then broaden to folder patterns when the name is random.
 
 ## How To Think About The Query
 
@@ -1091,9 +1103,9 @@ How can you find LSASS dump behavior even if the dump filename is random?
 <details>
 <summary>Break Down The KQL</summary>
 
-Look for file patterns and alert semantics instead of relying on one exact filename. `FileName endswith ".dmp"` catches dump files, while `Title has_any ("DumpLsass", "LSASS")` and `AttackTechniques has_any ("LSASS Memory", "T1003.001")` catch the Defender interpretation.
+Look for file patterns instead of relying on one exact filename. `FileName endswith ".dmp"` catches obvious dump files, while `FolderPath has "pid_"` catches the AttackIQ-style path pattern.
 
-Why this matters: random filenames are common, so hunt on file extension, path pattern, alert title, and ATT&CK technique.
+Why this matters: random filenames are common, so hunt on file extension and folder pattern before adding other context.
 
 ### Build The Hunt Step By Step
 
@@ -1110,18 +1122,20 @@ DeviceFileEvents
 | project Timestamp, FileName, FolderPath, ActionType
 ```
 
-Then connect the file to the detection language:
+Then broaden from only `.dmp` names to the AttackIQ dump path pattern:
 
 ```kusto
 let TargetDevice = "usm262346";
-AlertEvidence
+DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
-| where Title has_any ("DumpLsass", "LSASS")
-| project Timestamp, Title, AttackTechniques, ProcessCommandLine
+| where FileName endswith ".dmp" or FolderPath has "pid_"
+| project Timestamp, ActionType, FileName, FolderPath, SHA256
 ```
 
-KQL logic to learn: use `endswith` for extensions and use alert titles to translate a suspicious file into attacker behavior.
+Why the columns changed: the first query teaches the simplest clue, the `.dmp` extension. The second query keeps the same table but adds `SHA256` because the final answer needs a file identifier.
+
+KQL logic to learn: use `endswith` for extensions, and use folder patterns when the filename is random.
 
 </details>
 
@@ -1141,8 +1155,8 @@ DeviceFileEvents
 <summary>Full Answer And Explanation</summary>
 
 - Dump file: `pid_976_2ztj_d6a.dmp`
-- Alert: `An active 'DumpLsass' hacktool in a command line was prevented from executing`
-- ATT&CK: `LSASS Memory (T1003.001)`
+- File path clue: a temp path containing `pid_`
+- Hash: shown in `SHA256`
 
 ### How The KQL Finds It
 
@@ -1151,9 +1165,9 @@ This scenario teaches pattern hunting when filenames are random:
 1. `FileName endswith ".dmp"` finds dump files without knowing the full filename.
 2. `FolderPath has "pid_"` catches the AttackIQ-style dump path pattern.
 3. `project Timestamp, ActionType, FileName, FolderPath, SHA256` keeps the file evidence readable.
-4. The step-by-step `AlertEvidence` query provides the ATT&CK mapping: `LSASS Memory (T1003.001)`.
+4. `SHA256` gives you a stable identifier for the dump artifact.
 
-Checkpoint: random names require pattern logic. Extensions, folders, titles, and ATT&CK fields are all clues.
+Checkpoint: random names require pattern logic. Extensions and folders are clues too.
 
 </details>
 
@@ -1204,6 +1218,8 @@ DeviceFileEvents
 | project Timestamp, FileName, FolderPath, ActionType
 ```
 
+Why these columns: this first pass answers, "Did a PwDump-looking file appear on disk, and what file action happened?"
+
 Then search the alert wording:
 
 ```kusto
@@ -1214,6 +1230,8 @@ AlertEvidence
 | where FileName has "pwdump" or Title has "PWDump"
 | project Timestamp, Title, Severity, FileName
 ```
+
+Why the columns changed: `AlertEvidence` is where the prevention language lives. `Title` and `Severity` explain the outcome better than `FolderPath` does.
 
 KQL logic to learn: `Title` often tells you the outcome. Words like `prevented` or `blocked` change the story from execution to attempted execution.
 
@@ -1310,6 +1328,8 @@ AlertEvidence
 | where FileName has "gsecdump" or Title has "Vigorf"
 | project Timestamp, Title, Severity, FileName
 ```
+
+Why the columns changed: the file query uses `FolderPath` and `ActionType` to prove staging. The alert query uses `Title` because Defender may call the same threat by a malware-family name such as `Vigorf`.
 
 KQL logic to learn: one table may show the attacker tool name while another table shows the security product's malware family name.
 
@@ -1459,7 +1479,7 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ## KQL Skill
 
-When names are hidden or changed, hunt for script artifacts first. Pivot to Defender's verdict only after the artifact is found.
+When names are hidden or changed, hunt for script artifacts first. Do not depend on seeing `mimikatz.exe` as a process name.
 
 ## How To Think About The Query
 
@@ -1468,9 +1488,9 @@ What makes the obfuscated Mimikatz query a better lesson than simply searching f
 <details>
 <summary>Break Down The KQL</summary>
 
-The behavior is represented by a PowerShell script artifact, not a direct `mimikatz.exe` process. `FileName =~ "mimikatz_dump_passwords_v2.ps1"` catches the staged script, while `Title has "Mimikatz credential theft tool"` catches Defender's behavioral verdict.
+The behavior is represented by a PowerShell script artifact, not a direct `mimikatz.exe` process. `FileName =~ "mimikatz_dump_passwords_v2.ps1"` catches the staged script exactly.
 
-Why this matters: exact executable hunts are fragile. Combine artifact names with security product verdicts.
+Why this matters: exact executable hunts are fragile. A beginner-friendly hunt starts with the artifact you can prove in the file table.
 
 ### Build The Hunt Step By Step
 
@@ -1487,18 +1507,20 @@ DeviceFileEvents
 | project Timestamp, FileName, FolderPath, ActionType
 ```
 
-Then look for Defender's verdict, not only the filename:
+Then tighten to the exact script artifact used by this scenario:
 
 ```kusto
 let TargetDevice = "usm262346";
-AlertEvidence
+DeviceFileEvents
 | where Timestamp > ago(7d)
-| where DeviceName == TargetDevice or FileName has "mimikatz"
-| where Title has "Mimikatz credential theft tool" or FileName has "mimikatz"
-| project Timestamp, Title, Severity, FileName, SHA256
+| where DeviceName == TargetDevice
+| where FileName =~ "mimikatz_dump_passwords_v2.ps1"
+| project Timestamp, ActionType, FileName, FolderPath, SHA256
 ```
 
-KQL logic to learn: when tools are renamed, obfuscated, or wrapped in scripts, alert titles and behavior labels may be better clues than process names.
+Why the columns changed: the first query uses a broad keyword to find candidates. The second query uses the exact script name and adds `SHA256` because the final answer is a file-artifact answer.
+
+KQL logic to learn: when tools are renamed, obfuscated, or wrapped in scripts, start broad, then tighten to the exact artifact you can prove.
 
 </details>
 
@@ -1518,8 +1540,8 @@ DeviceFileEvents
 <summary>Full Answer And Explanation</summary>
 
 - Artifact: `mimikatz_dump_passwords_v2.ps1`
-- Defender verdict: `Mimikatz credential theft tool`
-- The hunt works even when the executable name is not `mimikatz.exe`.
+- Hash: shown in `SHA256`
+- The hunt works because the script artifact exists even when the process name is not `mimikatz.exe`.
 
 ### How The KQL Finds It
 
@@ -1527,9 +1549,9 @@ This scenario teaches why process names are not enough:
 
 1. `FileName =~ "mimikatz_dump_passwords_v2.ps1"` catches the script artifact.
 2. `DeviceFileEvents` shows the suspicious script even when there is no `mimikatz.exe` process name to search for.
-3. The step-by-step `AlertEvidence` query catches Defender's behavior verdict after the artifact is found.
+3. `SHA256` gives you a stable file identifier for reporting or follow-up hunting.
 
-Checkpoint: a Mimikatz detection can come from a script, zip, command, memory behavior, or tool verdict. Do not rely only on `mimikatz.exe`.
+Checkpoint: a Mimikatz hunt can start from a script, zip, command, memory behavior, or tool verdict. In this scenario, the script artifact is the cleanest beginner path.
 
 </details>
 
@@ -1580,6 +1602,8 @@ DeviceFileEvents
 | project Timestamp, FileName, FolderPath, ActionType, SHA256
 ```
 
+Why these columns: `FolderPath` and `ActionType` explain the file event; `SHA256` identifies the artifact even if the filename changes later.
+
 Then collect the evidence you would put in a report:
 
 ```kusto
@@ -1590,6 +1614,8 @@ AlertEvidence
 | where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
 | project Timestamp, Title, Severity, FileName, SHA256
 ```
+
+Why the columns changed: the report answer needs Defender's verdict, so `Title` and `Severity` replace file-lifecycle columns.
 
 KQL logic to learn: a good hunt answer includes the thing, the verdict, the hash, the time, and the device. That is what makes it repeatable.
 
