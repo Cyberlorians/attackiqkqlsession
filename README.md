@@ -42,10 +42,20 @@ Sentinel Data Lake uses `TimeGenerated`. Microsoft Defender XDR Advanced Hunting
 - Combine evidence with `union`, `project`, `order by`, `has`, `has_any`, and `has_all`.
 - Reconstruct attacker behavior from endpoint telemetry.
 
-Each scenario has two learning moments:
+Each scenario is built like a beginner CTF card:
 
-- A KQL teaching question that focuses on the query skill.
-- A CTF question that focuses on the investigation finding.
+- Mission: what the student is trying to catch.
+- KQL logic: the table, column, and operator that matter.
+- Build it slowly: small query pieces before the final hunt.
+- CTF question: the investigation answer students should prove.
+
+For every mini-query, paste the shared scope block first unless it is already included:
+
+```kusto
+let TargetDevice = "usm262346";
+let Start = datetime(2026-05-04T13:10:00Z);
+let End = datetime(2026-05-04T13:20:00Z);
+```
 
 ## Run Context
 
@@ -103,6 +113,34 @@ Endpoint investigations usually need more than one evidence type. `DeviceProcess
 The teaching point: use `project` inside each branch to normalize the output columns, then `order by TimeGenerated asc` to turn separate tables into one readable timeline.
 
 </details>
+
+## Build It Slowly
+
+Start with the question: "What happened on this one computer during the test window?"
+
+The beginner mistake is to search the whole tenant first. The better habit is to scope early:
+
+```kusto
+let TargetDevice = "usm262346";
+let Start = datetime(2026-05-04T13:10:00Z);
+let End = datetime(2026-05-04T13:20:00Z);
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| take 20
+```
+
+Now teach the timeline idea. A timeline needs a time column, an evidence type, and a detail column:
+
+```kusto
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| project TimeGenerated, EvidenceType="Process", Detail=ProcessCommandLine
+| order by TimeGenerated asc
+```
+
+Beginner checkpoint: Which column tells you when it happened? Which column tells you what command ran?
 
 ## Catch It
 
@@ -182,6 +220,31 @@ The teaching point: `=~` is a case-insensitive exact match, which is good when t
 
 </details>
 
+## Build It Slowly
+
+Mission: find a PowerShell script related to credentials in the registry.
+
+First, teach students where script file activity lives:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName =~ "credentials_in_registry.ps1"
+| project TimeGenerated, FileName, FolderPath, ActionType
+```
+
+Then teach the pivot from file evidence to security meaning:
+
+```kusto
+AlertEvidence
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
+| project TimeGenerated, Title, AttackTechniques, FileName
+```
+
+KQL logic to learn: use exact filename matching when the artifact name is known, then use `project` to keep only the columns that answer the CTF question.
+
 ## Catch It
 
 ```kusto
@@ -255,6 +318,32 @@ The teaching point: use `has_all` when the detection idea depends on a combinati
 
 </details>
 
+## Build It Slowly
+
+Mission: find a command that saved the local SAM registry hive.
+
+Start broad enough to see command lines for `cmd.exe`:
+
+```kusto
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName =~ "cmd.exe"
+| project TimeGenerated, FileName, ProcessCommandLine
+```
+
+Now add the required behavior terms:
+
+```kusto
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where ProcessCommandLine has_all ("reg save", "hklm\\sam")
+| project TimeGenerated, ProcessCommandLine, AccountName
+```
+
+KQL logic to learn: `has_all` is for "both of these clues must be present." That is different from `has_any`, where only one clue has to match.
+
 ## Catch It
 
 ```kusto
@@ -326,6 +415,33 @@ The teaching point: parent process fields are pivot fields. They explain why a n
 
 </details>
 
+## Build It Slowly
+
+Mission: prove that browser/WebCache collection happened and show the parent-child process chain.
+
+First, find the two process names students care about:
+
+```kusto
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName in~ ("powershell.exe", "esentutl.exe")
+| project TimeGenerated, FileName, ProcessCommandLine
+```
+
+Then add the parent process columns:
+
+```kusto
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName =~ "esentutl.exe"
+| project TimeGenerated, FileName, ProcessCommandLine,
+          InitiatingProcessFileName, InitiatingProcessCommandLine
+```
+
+KQL logic to learn: `InitiatingProcessFileName` and `InitiatingProcessCommandLine` answer "who launched this?"
+
 ## Catch It
 
 ```kusto
@@ -384,6 +500,31 @@ Start with `DeviceFileEvents` and `AlertEvidence`. `DeviceFileEvents` can show t
 The teaching point: absence of process execution is not absence of activity. Blocked tools often leave stronger evidence in file and alert tables.
 
 </details>
+
+## Build It Slowly
+
+Mission: catch Rubeus even if Defender blocked it before normal execution.
+
+Start with file staging:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName =~ "Rubeus.exe"
+| project TimeGenerated, FileName, FolderPath, ActionType, SHA256
+```
+
+Then ask Defender what it thought the file meant:
+
+```kusto
+AlertEvidence
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice or FileName =~ "Rubeus.exe"
+| project TimeGenerated, Title, AttackTechniques, FileName, SHA256
+```
+
+KQL logic to learn: when the process table is quiet, check file and alert tables before deciding nothing happened.
 
 ## Catch It
 
@@ -450,6 +591,32 @@ The teaching point: use `has_any` when a scenario may have several related artif
 
 </details>
 
+## Build It Slowly
+
+Mission: find the PowerShell Kerberoasting files.
+
+Start by searching for the family name, not one exact file:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName has "kerberoast"
+| project TimeGenerated, FileName, FolderPath, ActionType
+```
+
+Then tighten the logic to the expected pair of files:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")
+| project TimeGenerated, FileName, FolderPath, ActionType
+```
+
+KQL logic to learn: `has` is good for one clue. `has_any` is good when several related clue words can identify the same scenario.
+
 ## Catch It
 
 ```kusto
@@ -514,6 +681,32 @@ Look for file patterns and alert semantics instead of relying on one exact filen
 The teaching point: random filenames are common, so hunt on file extension, path pattern, alert title, and ATT&CK technique.
 
 </details>
+
+## Build It Slowly
+
+Mission: catch LSASS dumping even when the dump filename is not predictable.
+
+Start with the most beginner-friendly clue: dump files end in `.dmp`.
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName endswith ".dmp"
+| project TimeGenerated, FileName, FolderPath, ActionType
+```
+
+Then connect the file to the detection language:
+
+```kusto
+AlertEvidence
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where Title has_any ("DumpLsass", "LSASS")
+| project TimeGenerated, Title, AttackTechniques, ProcessCommandLine
+```
+
+KQL logic to learn: use `endswith` for extensions and use alert titles to translate a suspicious file into attacker behavior.
 
 ## Catch It
 
@@ -580,6 +773,32 @@ The teaching point: a prevented attack still produces useful telemetry. Teach st
 
 </details>
 
+## Build It Slowly
+
+Mission: prove PwDump was attempted and explain whether it ran or was blocked.
+
+First, search file evidence with a simple keyword:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName has "pwdump"
+| project TimeGenerated, FileName, FolderPath, ActionType
+```
+
+Then search the alert wording:
+
+```kusto
+AlertEvidence
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice or FileName has "pwdump"
+| where FileName has "pwdump" or Title has "PWDump"
+| project TimeGenerated, Title, Severity, FileName
+```
+
+KQL logic to learn: `Title` often tells you the outcome. Words like `prevented` or `blocked` change the story from execution to attempted execution.
+
 ## Catch It
 
 ```kusto
@@ -645,6 +864,32 @@ The teaching point: do not assume the alert title will repeat the tool name. Pai
 
 </details>
 
+## Build It Slowly
+
+Mission: connect the staged `gsecdump` artifact to Defender's different detection name.
+
+Start with the tool name:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName has "gsecdump"
+| project TimeGenerated, FileName, FolderPath, ActionType
+```
+
+Then search alert evidence with both artifact and detection-family terms:
+
+```kusto
+AlertEvidence
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice or FileName has "gsecdump"
+| where FileName has "gsecdump" or Title has_any ("Vigorf", "malware")
+| project TimeGenerated, Title, Severity, FileName
+```
+
+KQL logic to learn: one table may show the attacker tool name while another table shows the security product's malware family name.
+
 ## Catch It
 
 ```kusto
@@ -708,6 +953,33 @@ Query `DeviceFileEvents` for `FileName has "lazagne"`, then keep `ActionType` in
 The teaching point: include `ActionType` when hunting file artifacts. The action tells the story, not just the filename.
 
 </details>
+
+## Build It Slowly
+
+Mission: show that LaZagne appeared on disk and was later removed.
+
+Start by finding every LaZagne file event:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName has "lazagne"
+| project TimeGenerated, FileName, ActionType, FolderPath
+| order by TimeGenerated asc
+```
+
+Then summarize the lifecycle:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName has "lazagne"
+| summarize Actions=make_set(ActionType), FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated) by FileName
+```
+
+KQL logic to learn: `summarize` turns many rows into one answer. `make_set(ActionType)` shows all actions seen for the file.
 
 ## Catch It
 
@@ -774,6 +1046,32 @@ The teaching point: exact executable hunts are fragile. Combine artifact names w
 
 </details>
 
+## Build It Slowly
+
+Mission: catch a Mimikatz-style attack that does not show up as `mimikatz.exe`.
+
+Start with the script artifact:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName has "mimikatz"
+| project TimeGenerated, FileName, FolderPath, ActionType
+```
+
+Then look for Defender's verdict, not only the filename:
+
+```kusto
+AlertEvidence
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice or FileName has "mimikatz"
+| where Title has "Mimikatz credential theft tool" or FileName has "mimikatz"
+| project TimeGenerated, Title, Severity, FileName, SHA256
+```
+
+KQL logic to learn: when tools are renamed, obfuscated, or wrapped in scripts, alert titles and behavior labels may be better clues than process names.
+
 ## Catch It
 
 ```kusto
@@ -838,6 +1136,32 @@ An obvious filename is a clue, not full proof. Projecting `SHA256`, `Title`, and
 The teaching point: finish a hunt by producing evidence another analyst can validate: filename, hash, alert title, severity, time, and device.
 
 </details>
+
+## Build It Slowly
+
+Mission: validate the classic Mimikatz artifact with a filename, alert verdict, and hash.
+
+Start with the obvious artifact:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName =~ "mimikatz-x64.zip"
+| project TimeGenerated, FileName, FolderPath, ActionType, SHA256
+```
+
+Then collect the evidence you would put in a report:
+
+```kusto
+AlertEvidence
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
+| where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
+| project TimeGenerated, Title, Severity, FileName, SHA256
+```
+
+KQL logic to learn: a good hunt answer includes the thing, the verdict, the hash, the time, and the device. That is what makes it repeatable.
 
 ## Catch It
 
