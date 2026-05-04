@@ -1,0 +1,9 @@
+# Local editor/system files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Optional local exports
+*.csv
+*.json
+*.zip
