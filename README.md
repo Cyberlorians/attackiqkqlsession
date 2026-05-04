@@ -1,8 +1,8 @@
 # AttackIQ Scenario: Security Control Baseline - Endpoint EDR
 
-This is a Microsoft Defender XDR Advanced Hunting KQL teaching lab built from an authorized AttackIQ `Security Control Baseline - Endpoint EDR` run. The goal is not just to show finished queries. The goal is to teach students how to think like hunters: start with one workstation, find clues, pivot across tables, and explain what happened.
+This is a Microsoft Defender XDR Advanced Hunting KQL lab built from an authorized AttackIQ `Security Control Baseline - Endpoint EDR` run. The goal is not just to copy finished queries. The goal is to think like a hunter: start with one workstation, find clues, pivot across tables, and explain what happened.
 
-The class story: a simulated attacker ran a fast credential-access sequence on one workstation. Students have to catch each move with KQL.
+The story: a simulated attacker ran a fast credential-access sequence on one workstation. Your job is to catch each move with KQL.
 
 ## Scope
 
@@ -20,7 +20,7 @@ This lab is written for Microsoft Defender XDR Advanced Hunting. The XDR tables 
 
 ## Core Tables
 
-| Table | Why students use it |
+| Table | Why it matters |
 |---|---|
 | `DeviceProcessEvents` | Process execution, command lines, parent processes, initiating users. |
 | `DeviceFileEvents` | Tool staging, scripts, zip files, dump files, cleanup. |
@@ -36,17 +36,17 @@ This lab is written for Microsoft Defender XDR Advanced Hunting. The XDR tables 
 - Combine evidence with `union`, `project`, `order by`, `has`, `has_any`, and `has_all`.
 - Reconstruct attacker behavior from endpoint telemetry.
 
-Each scenario follows the same beginner-friendly flow:
+Each scenario follows the same learner-friendly flow:
 
-- Scenario brief: what the simulated attacker did.
-- KQL skill to learn: the table, column, or operator that matters.
-- Learn the KQL: the idea explained in plain English.
-- Build it slowly: small query pieces students run first.
-- Your CTF challenge: the question students answer after the build steps.
-- Full hunt query: the check-your-work query students use if they get stuck.
+- What happened: the attacker story in plain English.
+- KQL skill: the table, column, or operator that matters.
+- How to think about the query: the hunting idea before the syntax.
+- Build the hunt step by step: small query pieces to run first.
+- Your challenge: the question to answer from the data.
+- Full answer query: the complete check-your-work query.
 - Answer key: the final answer plus how the KQL found it.
 
-In other words: teach the move, practice the move, then ask the CTF question. The CTF challenge is not the beginning; it is the moment where students try to apply what they just learned.
+In other words: understand the move, practice the move, then answer the CTF question. The challenge is not the beginning; it is where you apply what you just learned.
 
 For every mini-query, paste the shared scope block first unless it is already included:
 
@@ -83,7 +83,7 @@ How to read it:
 - `=~`: case-insensitive exact match, useful for known filenames.
 - `in~`: case-insensitive match against a list of exact values.
 - `endswith`: useful for extensions like `.dmp`.
-- `project`: choose the columns students need for the answer.
+- `project`: choose the columns needed for the answer.
 - `summarize`: group rows into counts or rollups.
 - `order by`: sort results so the story is easier to read.
 
@@ -96,7 +96,7 @@ Beginner habit: every answer should prove four things when possible: **when**, *
 
 ## Pre-CTF KQL Refresher
 
-Before the CTF starts, students should practice the handful of KQL moves they will use over and over. This is the warm-up gym. Keep it light, fast, and interactive.
+Before the CTF starts, practice the handful of KQL moves they will use over and over. This is the warm-up gym. Keep it light, fast, and interactive.
 
 ### Query Construction Flow
 
@@ -126,7 +126,7 @@ What each stage means:
 | Analyze or pivot | `summarize`, parent columns, hashes, alerts | What pattern or next clue appears? |
 | Present evidence | `project`, `order by` | What columns prove my answer? |
 
-Mini-coach line: do not try to write the perfect query first. Start messy, filter down, then clean up the output.
+Quick note: do not try to write the perfect query first. Start messy, filter down, then clean up the output.
 
 ### Refresher 1: Filtering With `where`
 
@@ -161,7 +161,7 @@ Common `where` patterns:
 
 ### Refresher 2: Choosing Columns With `project`
 
-`project` is how students turn noisy raw telemetry into readable evidence.
+`project` turns noisy raw telemetry into readable evidence.
 
 ```kusto
 DeviceFileEvents
@@ -273,7 +273,7 @@ AlertEvidence
 | project Timestamp, Title, FileName, AttackTechniques, SHA256
 ```
 
-Mini-coach line: one good clue should create the next query.
+Quick note: one good clue should create the next query.
 
 ### Refresher 6: Combining Tables With `union`
 
@@ -308,7 +308,7 @@ Mini-exercise: add `"mimikatz"` to both `has_any` lists. What new evidence appea
 
 ### Pre-CTF Practice Round
 
-Before opening Scenario 01, have students answer these quick questions:
+Before opening Scenario 01, answer these quick questions:
 
 1. Which table shows process command lines?
 2. Which table shows files created or deleted?
@@ -356,9 +356,9 @@ Recommended teaching flow:
 2. Set the shared target device variable.
 3. Run the warm-up timeline so students see the activity cluster.
 4. Open each scenario in order.
-5. Have students run **Build It Slowly** first.
-6. Ask **Your CTF Challenge**.
-7. Use **Full Hunt Query** only when students need a nudge or want to check their work.
+5. Have students run **Build The Hunt Step By Step** first.
+6. Ask **Your Challenge**.
+7. Use **Full Answer Query** only when students need a nudge or want to check their work.
 8. Open **Answer Key** last.
 
 What to say if students get lost:
@@ -462,28 +462,28 @@ All 11 scenarios produced telemetry on `usm262346`.
 <details open>
 <summary><strong>00 - Warm-Up: Rebuild the Attack Timeline</strong></summary>
 
-## Scenario Brief
+## What Happened
 
-Before chasing individual scenarios, students rebuild the attacker timeline. This teaches them that one table rarely tells the whole story.
+Before chasing individual scenarios, rebuild the attacker timeline. This shows why one table rarely tells the whole story.
 
-## KQL Skill To Learn
+## KQL Skill
 
 `let`, `union`, `project`, `order by`, workstation scoping.
 
-## Learn The KQL
+## How To Think About The Query
 
 Why does this warm-up use `union isfuzzy=true` instead of querying only one table?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
-Endpoint investigations usually need more than one evidence type. `DeviceProcessEvents` shows execution, `DeviceFileEvents` shows staged or deleted files, and `AlertEvidence` shows Defender verdicts. `union isfuzzy=true` lets students combine those tables even when the projected columns are not identical across every source.
+Endpoint investigations usually need more than one evidence type. `DeviceProcessEvents` shows execution, `DeviceFileEvents` shows staged or deleted files, and `AlertEvidence` shows Defender verdicts. `union isfuzzy=true` lets you combine those tables even when the projected columns are not identical across every source.
 
-The teaching point: use `project` inside each branch to normalize the output columns, then `order by Timestamp asc` to turn separate tables into one readable timeline.
+Why this matters: use `project` inside each branch to normalize the output columns, then `order by Timestamp asc` to turn separate tables into one readable timeline.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Start with the question: "What happened on this one computer during the test window?"
 
@@ -497,7 +497,7 @@ DeviceProcessEvents
 | take 20
 ```
 
-Now teach the timeline idea. A timeline needs a time column, an evidence type, and a detail column:
+Now shape the rows into a timeline. A timeline needs a time column, an evidence type, and a detail column:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -508,15 +508,15 @@ DeviceProcessEvents
 | order by Timestamp asc
 ```
 
-Beginner checkpoint: Which column tells you when it happened? Which column tells you what command ran?
+Checkpoint: Which column tells you when it happened? Which column tells you what command ran?
 
-## Your CTF Challenge
+## Your Challenge
 
 What launched the attack, what account ran it, and where did the AttackIQ runtime unpack itself?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -552,7 +552,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - Launcher: `SecBase_security-control-baseline-endpoint-edr_V1_0_51_amd64_gui-sig.exe`
 - Account: `xadmin`
@@ -569,7 +569,7 @@ Read the warm-up query like this:
 4. Each branch uses `project` to rename different columns into the same story columns: `Timestamp`, `EvidenceType`, `Action`, `Detail`, and `Source`.
 5. `order by Timestamp asc` turns all three evidence types into one timeline.
 
-Beginner checkpoint: when you see `union`, ask, "What tables are being combined, and did we make their output columns match?"
+Checkpoint: when you see `union`, ask, "What tables are being combined, and did we make their output columns match?"
 
 </details>
 
@@ -580,32 +580,32 @@ Beginner checkpoint: when you see `union`, ask, "What tables are being combined,
 <details>
 <summary><strong>01 - Credentials In Registry Script</strong></summary>
 
-## Scenario Brief
+## What Happened
 
 The attacker tries to abuse the registry as a place where credential material can live. The task is to find the script, prove it ran, and connect it to Defender's ATT&CK mapping.
 
-## KQL Skill To Learn
+## KQL Skill
 
 Start with a file or script name, then pivot into alert evidence.
 
-## Learn The KQL
+## How To Think About The Query
 
 When you know the suspicious script name, which KQL pattern helps you prove both file staging and Defender detection?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
 Use the script name as the anchor in more than one table. In this scenario, `FileName =~ "credentials_in_registry.ps1"` finds the staged file, while `AttackTechniques has_any ("Credentials in Registry", "T1552.002")` connects the behavior to the Defender/ATT&CK context.
 
-The teaching point: `=~` is a case-insensitive exact match, which is good when the filename is known. `has_any` is better for matching one of several alert or technique clues.
+Why this matters: `=~` is a case-insensitive exact match, which is good when the filename is known. `has_any` is better for matching one of several alert or technique clues.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: find a PowerShell script related to credentials in the registry.
 
-First, teach students where script file activity lives:
+First, find where script file activity lives:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -616,7 +616,7 @@ DeviceFileEvents
 | project Timestamp, FileName, FolderPath, ActionType
 ```
 
-Then teach the pivot from file evidence to security meaning:
+Then pivot from file evidence to security meaning:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -628,13 +628,13 @@ AlertEvidence
 
 KQL logic to learn: use exact filename matching when the artifact name is known, then use `project` to keep only the columns that answer the CTF question.
 
-## Your CTF Challenge
+## Your Challenge
 
 Which script is the registry-creds clue, and which ATT&CK technique did Defender attach to it?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -666,7 +666,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - Script: `credentials_in_registry.ps1`
 - Alert: `A malicious PowerShell Cmdlet was invoked on the machine`
@@ -680,7 +680,7 @@ The answer comes from three beginner pivots:
 2. `DeviceProcessEvents` plus `ProcessCommandLine has "credentials_in_registry.ps1"` checks whether PowerShell tried to run it.
 3. `AlertEvidence` plus `AttackTechniques has_any ("Credentials in Registry", "T1552.002")` explains why Defender cared.
 
-Beginner checkpoint: `FileName` tells you what the artifact was. `Title` and `AttackTechniques` tell you why it matters.
+Checkpoint: `FileName` tells you what the artifact was. `Title` and `AttackTechniques` tell you why it matters.
 
 </details>
 
@@ -691,28 +691,28 @@ Beginner checkpoint: `FileName` tells you what the artifact was. `Title` and `At
 <details>
 <summary><strong>02 - Dump SAM Registry Hive via reg save</strong></summary>
 
-## Scenario Brief
+## What Happened
 
 The attacker tries to copy the local SAM registry hive. The command line is the clue.
 
-## KQL Skill To Learn
+## KQL Skill
 
 Use `has_all` when multiple terms must appear together in the same command line.
 
-## Learn The KQL
+## How To Think About The Query
 
 Why is `has_all ("reg save", "hklm\\sam")` stronger than only searching for `reg` or `sam`?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
 `reg` by itself is too broad, and `sam` by itself can appear in unrelated paths or names. `has_all` requires both clues to exist in the same command line, which makes the result much closer to the real behavior: saving the SAM registry hive.
 
-The teaching point: use `has_all` when the detection idea depends on a combination of words, not just one keyword.
+Why this matters: use `has_all` when the detection idea depends on a combination of words, not just one keyword.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: find a command that saved the local SAM registry hive.
 
@@ -740,13 +740,13 @@ DeviceProcessEvents
 
 KQL logic to learn: `has_all` is for "both of these clues must be present." That is different from `has_any`, where only one clue has to match.
 
-## Your CTF Challenge
+## Your Challenge
 
 Where did the attacker try to save the SAM hive?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -772,7 +772,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 The command line shows:
 
@@ -803,32 +803,32 @@ Then `project Timestamp, FileName, Detail=ProcessCommandLine` keeps the columns 
 <details>
 <summary><strong>03 - Browser Data via Esentutl and PowerShell</strong></summary>
 
-## Scenario Brief
+## What Happened
 
 The attacker goes after browser/WebCache data. PowerShell starts the script, and `esentutl.exe` does the database work.
 
-## KQL Skill To Learn
+## KQL Skill
 
 Follow parent and child process relationships with `InitiatingProcessCommandLine`.
 
-## Learn The KQL
+## How To Think About The Query
 
 How does KQL show that `esentutl.exe` was part of the PowerShell browser-data collection chain?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
 Query both `FileName` and `InitiatingProcessCommandLine`. `FileName in~ ("powershell.exe", "esentutl.exe")` catches the parent and child process names, while `InitiatingProcessCommandLine has "collect_database_webcache.ps1"` ties the child process back to the script that launched it.
 
-The teaching point: parent process fields are pivot fields. They explain why a normal Windows binary appeared in the timeline.
+Why this matters: parent process fields are pivot fields. They explain why a normal Windows binary appeared in the timeline.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: prove that browser/WebCache collection happened and show the parent-child process chain.
 
-First, find the two process names students care about:
+First, find the two process names that matter:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -853,13 +853,13 @@ DeviceProcessEvents
 
 KQL logic to learn: `InitiatingProcessFileName` and `InitiatingProcessCommandLine` answer "who launched this?"
 
-## Your CTF Challenge
+## Your Challenge
 
 Which process launched `esentutl.exe`, and what browser/cache path was targeted?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -876,7 +876,7 @@ DeviceProcessEvents
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - Parent process: `powershell.exe`
 - Script: `collect_database_webcache.ps1`
@@ -887,12 +887,12 @@ DeviceProcessEvents
 
 This answer is about parent and child process thinking:
 
-1. `FileName in~ ("powershell.exe", "esentutl.exe")` keeps the two process names students care about.
+1. `FileName in~ ("powershell.exe", "esentutl.exe")` keeps the two process names that matter.
 2. `ProcessCommandLine has_any (...)` finds direct command-line clues like `WebCache`.
 3. `InitiatingProcessCommandLine has "collect_database_webcache.ps1"` shows what launched the child process.
 4. `project ... InitiatingProcessFileName, InitiatingProcessCommandLine` keeps the parent process evidence visible.
 
-Beginner checkpoint: `FileName` is the process itself. `InitiatingProcessFileName` is the process that started it.
+Checkpoint: `FileName` is the process itself. `InitiatingProcessFileName` is the process that started it.
 
 </details>
 
@@ -903,28 +903,28 @@ Beginner checkpoint: `FileName` is the process itself. `InitiatingProcessFileNam
 <details>
 <summary><strong>04 - Kerberoasting Using Rubeus</strong></summary>
 
-## Scenario Brief
+## What Happened
 
 The attacker stages Rubeus for Kerberoasting. Defender interrupts the move, but the staged file and alert evidence prove what happened.
 
-## KQL Skill To Learn
+## KQL Skill
 
 A blocked tool may not produce a clean process execution row. Hunt file staging and `AlertEvidence`.
 
-## Learn The KQL
+## How To Think About The Query
 
-If Defender blocks a tool before normal execution telemetry appears, which tables should students query first?
+If Defender blocks a tool before normal execution telemetry appears, which tables should you query first?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
 Start with `DeviceFileEvents` and `AlertEvidence`. `DeviceFileEvents` can show that `Rubeus.exe` was staged on disk. `AlertEvidence` can show the Defender verdict and ATT&CK mapping even if there is no clean `DeviceProcessEvents` execution row.
 
-The teaching point: absence of process execution is not absence of activity. Blocked tools often leave stronger evidence in file and alert tables.
+Why this matters: absence of process execution is not absence of activity. Blocked tools often leave stronger evidence in file and alert tables.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: catch Rubeus even if Defender blocked it before normal execution.
 
@@ -951,13 +951,13 @@ AlertEvidence
 
 KQL logic to learn: when the process table is quiet, check file and alert tables before deciding nothing happened.
 
-## Your CTF Challenge
+## Your Challenge
 
 What file name and hash identify the Rubeus attempt?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -981,7 +981,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - File: `Rubeus.exe`
 - Hash: `1e1fe8a1730bf8caabd867fd2f990b0e52aee0f9f8635578ff8b18c0950b616c`
@@ -995,7 +995,7 @@ This scenario teaches that blocked tools may be easier to find in file and alert
 2. `AlertEvidence` plus `AttackTechniques has_any ("Kerberoasting", "T1558.003")` proves the behavior category.
 3. `SHA256` gives a durable identifier for the exact file.
 
-Beginner checkpoint: if `DeviceProcessEvents` is quiet, do not stop. Check `DeviceFileEvents` and `AlertEvidence`.
+Checkpoint: if `DeviceProcessEvents` is quiet, do not stop. Check `DeviceFileEvents` and `AlertEvidence`.
 
 </details>
 
@@ -1006,28 +1006,28 @@ Beginner checkpoint: if `DeviceProcessEvents` is quiet, do not stop. Check `Devi
 <details>
 <summary><strong>05 - PowerShell Empire Invoke-Kerberoast</strong></summary>
 
-## Scenario Brief
+## What Happened
 
 The attacker switches from a standalone executable to a PowerShell Kerberoasting script.
 
-## KQL Skill To Learn
+## KQL Skill
 
 Hunt script staging first, then pivot to alert evidence and ATT&CK context.
 
-## Learn The KQL
+## How To Think About The Query
 
 Why does this query use `FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")` instead of an exact filename match?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
 This scenario stages more than one related PowerShell file. `has_any` lets the query catch both the wrapper script and the main Kerberoast script without writing separate filters for each filename.
 
-The teaching point: use `has_any` when a scenario may have several related artifact names and any one of them is enough to include the row.
+Why this matters: use `has_any` when a scenario may have several related artifact names and any one of them is enough to include the row.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: find the PowerShell Kerberoasting files.
 
@@ -1055,13 +1055,13 @@ DeviceFileEvents
 
 KQL logic to learn: `has` is good for one clue. `has_any` is good when several related clue words can identify the same scenario.
 
-## Your CTF Challenge
+## Your Challenge
 
 Which two PowerShell files were staged for the Kerberoasting test?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1085,7 +1085,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - `call-invoke-kerberoast.ps1`
 - `invoke-kerberoast.ps1`
@@ -1103,7 +1103,7 @@ Read it as: keep rows where the filename has either of those terms. That is usef
 
 Then the `AlertEvidence` branch uses the same keyword family to connect the script to Defender's Kerberoasting context.
 
-Beginner checkpoint: `has_any` is for "any one of these clues is enough."
+Checkpoint: `has_any` is for "any one of these clues is enough."
 
 </details>
 
@@ -1114,28 +1114,28 @@ Beginner checkpoint: `has_any` is for "any one of these clues is enough."
 <details>
 <summary><strong>06 - LSASS Minidump</strong></summary>
 
-## Scenario Brief
+## What Happened
 
 The attacker tries to dump LSASS. A dump file lands in temp and Defender raises a `DumpLsass` prevention alert.
 
-## KQL Skill To Learn
+## KQL Skill
 
 Dump files are investigation gold. Hunt for `.dmp`, then connect the file to alert evidence.
 
-## Learn The KQL
+## How To Think About The Query
 
-How can students find LSASS dump behavior even if the dump filename is random?
+How can you find LSASS dump behavior even if the dump filename is random?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
 Look for file patterns and alert semantics instead of relying on one exact filename. `FileName endswith ".dmp"` catches dump files, while `Title has_any ("DumpLsass", "LSASS")` and `AttackTechniques has_any ("LSASS Memory", "T1003.001")` catch the Defender interpretation.
 
-The teaching point: random filenames are common, so hunt on file extension, path pattern, alert title, and ATT&CK technique.
+Why this matters: random filenames are common, so hunt on file extension, path pattern, alert title, and ATT&CK technique.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: catch LSASS dumping even when the dump filename is not predictable.
 
@@ -1163,13 +1163,13 @@ AlertEvidence
 
 KQL logic to learn: use `endswith` for extensions and use alert titles to translate a suspicious file into attacker behavior.
 
-## Your CTF Challenge
+## Your Challenge
 
 What dump file was created, and what ATT&CK sub-technique did the alert map to?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1193,7 +1193,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - Dump file: `pid_976_2ztj_d6a.dmp`
 - Alert: `An active 'DumpLsass' hacktool in a command line was prevented from executing`
@@ -1208,7 +1208,7 @@ This scenario teaches pattern hunting when filenames are random:
 3. `Title has_any ("DumpLsass", "LSASS")` searches the Defender alert language.
 4. `AttackTechniques has_any ("LSASS Memory", "T1003.001")` ties the alert to the ATT&CK sub-technique.
 
-Beginner checkpoint: random names require pattern logic. Extensions, folders, titles, and ATT&CK fields are all clues.
+Checkpoint: random names require pattern logic. Extensions, folders, titles, and ATT&CK fields are all clues.
 
 </details>
 
@@ -1219,28 +1219,28 @@ Beginner checkpoint: random names require pattern logic. Extensions, folders, ti
 <details>
 <summary><strong>07 - Dump Passwords Using PwDump7</strong></summary>
 
-## Scenario Brief
+## What Happened
 
-The attacker stages PwDump7. Defender prevents the hacktool, but students can still prove the attempted credential dump.
+The attacker stages PwDump7. Defender prevents the hacktool, but you can still prove the attempted credential dump.
 
-## KQL Skill To Learn
+## KQL Skill
 
 Use `AlertEvidence` for prevented tools and `DeviceFileEvents` for the staged artifact.
 
-## Learn The KQL
+## How To Think About The Query
 
 What KQL evidence tells you the PwDump scenario was attempted but prevented?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
 Use a `union` of file and alert evidence. `DeviceFileEvents | where FileName has "pwdump"` shows the artifact, and `AlertEvidence | where Title has "PWDump"` shows Defender's prevention verdict.
 
-The teaching point: a prevented attack still produces useful telemetry. Teach students to read `Title`, `Severity`, and `FileName` together.
+Why this matters: a prevented attack still produces useful telemetry. Read `Title`, `Severity`, and `FileName` together.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: prove PwDump was attempted and explain whether it ran or was blocked.
 
@@ -1268,13 +1268,13 @@ AlertEvidence
 
 KQL logic to learn: `Title` often tells you the outcome. Words like `prevented` or `blocked` change the story from execution to attempted execution.
 
-## Your CTF Challenge
+## Your Challenge
 
 Was PwDump executed cleanly, or was it prevented? What tells you?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1298,7 +1298,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - Artifact: `pwdump7.zip`
 - Defender alert: `'PWDump' hacktool was prevented`
@@ -1312,9 +1312,9 @@ The answer comes from comparing file evidence with alert evidence:
 2. `AlertEvidence | where Title has "PWDump"` finds Defender's verdict.
 3. `project Timestamp, EvidenceType, FileName, Detail` keeps the result readable.
 
-The word `prevented` in the alert title matters. It tells students this was an attempted credential dump, not clean execution.
+The word `prevented` in the alert title matters. It tells you this was an attempted credential dump, not clean execution.
 
-Beginner checkpoint: the security outcome is usually in `Title`, not just `FileName`.
+Checkpoint: the security outcome is usually in `Title`, not just `FileName`.
 
 </details>
 
@@ -1325,28 +1325,28 @@ Beginner checkpoint: the security outcome is usually in `Title`, not just `FileN
 <details>
 <summary><strong>08 - Dump Passwords Using gsecdump</strong></summary>
 
-## Scenario Brief
+## What Happened
 
 The attacker stages `gsecdump`. Defender does not necessarily call it by that exact name, which is the point of the lesson.
 
-## KQL Skill To Learn
+## KQL Skill
 
 Tool names and detection names do not always match. Hunt both the staged file name and alert title.
 
-## Learn The KQL
+## How To Think About The Query
 
 Why should the query search for both `gsecdump` and `Vigorf`?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
 The tool name and the detection name are not always the same. `FileName has "gsecdump"` finds the staged artifact, while `Title has_any ("Vigorf", "malware")` catches how Defender classified the threat.
 
-The teaching point: do not assume the alert title will repeat the tool name. Pair artifact terms with detection-family terms.
+Why this matters: do not assume the alert title will repeat the tool name. Pair artifact terms with detection-family terms.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: connect the staged `gsecdump` artifact to Defender's different detection name.
 
@@ -1374,13 +1374,13 @@ AlertEvidence
 
 KQL logic to learn: one table may show the attacker tool name while another table shows the security product's malware family name.
 
-## Your CTF Challenge
+## Your Challenge
 
 What did Defender call the threat, and what was the actual staged file name?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1404,7 +1404,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - Staged file: `gsecdump-0.7-win32.zip`
 - Defender alert: `'Vigorf' malware was prevented`
@@ -1417,7 +1417,7 @@ This is a naming lesson:
 2. `Title has_any ("Vigorf", "malware")` finds what Defender called it.
 3. Seeing both in the same time window connects the artifact name to the detection name.
 
-Beginner checkpoint: do not expect the alert title to repeat your search term. Defender may use a malware family or detection family name.
+Checkpoint: do not expect the alert title to repeat your search term. Defender may use a malware family or detection family name.
 
 </details>
 
@@ -1428,28 +1428,28 @@ Beginner checkpoint: do not expect the alert title to repeat your search term. D
 <details>
 <summary><strong>09 - Dump Passwords Using LaZagne</strong></summary>
 
-## Scenario Brief
+## What Happened
 
 The attacker stages LaZagne, a credential recovery tool. It appears and then gets cleaned up.
 
-## KQL Skill To Learn
+## KQL Skill
 
 Use file events to catch both `FileCreated` and `FileDeleted` for the same suspicious artifact.
 
-## Learn The KQL
+## How To Think About The Query
 
 How can KQL show that LaZagne was staged and then cleaned up?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
 Query `DeviceFileEvents` for `FileName has "lazagne"`, then keep `ActionType` in the projected output. Seeing both creation and deletion actions for the same artifact shows the tool lifecycle.
 
-The teaching point: include `ActionType` when hunting file artifacts. The action tells the story, not just the filename.
+Why this matters: include `ActionType` when hunting file artifacts. The action tells the story, not just the filename.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: show that LaZagne appeared on disk and was later removed.
 
@@ -1478,13 +1478,13 @@ DeviceFileEvents
 
 KQL logic to learn: `summarize` turns many rows into one answer. `make_set(ActionType)` shows all actions seen for the file.
 
-## Your CTF Challenge
+## Your Challenge
 
 How do we know the tool was cleaned up after staging?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1508,7 +1508,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - Artifact: `laZagne_windows_x64.exe`
 - Evidence: the file was created and later deleted.
@@ -1523,7 +1523,7 @@ This scenario teaches file lifecycle:
 3. `order by Timestamp asc` shows creation before deletion.
 4. Optional: `summarize Actions=make_set(ActionType) by FileName` rolls multiple rows into one answer.
 
-Beginner checkpoint: `ActionType` is the column that tells you whether the file was created, deleted, or changed.
+Checkpoint: `ActionType` is the column that tells you whether the file was created, deleted, or changed.
 
 </details>
 
@@ -1534,28 +1534,28 @@ Beginner checkpoint: `ActionType` is the column that tells you whether the file 
 <details>
 <summary><strong>10 - Dump Windows Passwords with Obfuscated Mimikatz</strong></summary>
 
-## Scenario Brief
+## What Happened
 
 The attacker uses a Mimikatz-style script rather than a simple `mimikatz.exe` execution. The obvious filename hunt is not enough.
 
-## KQL Skill To Learn
+## KQL Skill
 
 When names are hidden or changed, hunt for script artifacts and Defender's credential-theft verdict.
 
-## Learn The KQL
+## How To Think About The Query
 
 What makes the obfuscated Mimikatz query a better lesson than simply searching for `mimikatz.exe`?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
 The behavior is represented by a PowerShell script artifact, not a direct `mimikatz.exe` process. `FileName =~ "mimikatz_dump_passwords_v2.ps1"` catches the staged script, while `Title has "Mimikatz credential theft tool"` catches Defender's behavioral verdict.
 
-The teaching point: exact executable hunts are fragile. Combine artifact names with security product verdicts.
+Why this matters: exact executable hunts are fragile. Combine artifact names with security product verdicts.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: catch a Mimikatz-style attack that does not show up as `mimikatz.exe`.
 
@@ -1583,13 +1583,13 @@ AlertEvidence
 
 KQL logic to learn: when tools are renamed, obfuscated, or wrapped in scripts, alert titles and behavior labels may be better clues than process names.
 
-## Your CTF Challenge
+## Your Challenge
 
 What makes this hunt different from simply looking for `mimikatz.exe`?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1613,7 +1613,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - Artifact: `mimikatz_dump_passwords_v2.ps1`
 - Defender verdict: `Mimikatz credential theft tool`
@@ -1621,13 +1621,13 @@ union isfuzzy=true
 
 ### How The KQL Finds It
 
-This scenario teaches students not to hunt only process names:
+This scenario teaches why process names are not enough:
 
 1. `FileName =~ "mimikatz_dump_passwords_v2.ps1"` catches the script artifact.
 2. `Title has "Mimikatz credential theft tool"` catches Defender's behavior verdict.
 3. `or FileName =~ ...` in the alert branch keeps the search connected to the artifact even when `DeviceName` is missing or sparse in alert evidence.
 
-Beginner checkpoint: a Mimikatz detection can come from a script, zip, command, memory behavior, or tool verdict. Do not rely only on `mimikatz.exe`.
+Checkpoint: a Mimikatz detection can come from a script, zip, command, memory behavior, or tool verdict. Do not rely only on `mimikatz.exe`.
 
 </details>
 
@@ -1638,28 +1638,28 @@ Beginner checkpoint: a Mimikatz detection can come from a script, zip, command, 
 <details>
 <summary><strong>11 - Dump Windows Passwords with Original Mimikatz</strong></summary>
 
-## Scenario Brief
+## What Happened
 
-The attacker stages the classic Mimikatz package. This is the high-confidence scenario students expect, but they should still prove it with evidence.
+The attacker stages the classic Mimikatz package. This is the obvious Mimikatz scenario, but you still need to prove it with evidence.
 
-## KQL Skill To Learn
+## KQL Skill
 
 Use obvious file names when available, but validate with alert evidence and hashes.
 
-## Learn The KQL
+## How To Think About The Query
 
-When the filename is obvious, why should students still project `SHA256` and alert details?
+When the filename is obvious, why should you still project `SHA256` and alert details?
 
 <details>
-<summary>KQL Explanation</summary>
+<summary>Break Down The KQL</summary>
 
-An obvious filename is a clue, not full proof. Projecting `SHA256`, `Title`, and `Severity` gives students a durable indicator and the Defender verdict that explains why the artifact matters.
+An obvious filename is a clue, not full proof. Projecting `SHA256`, `Title`, and `Severity` gives you a durable indicator and the Defender verdict that explains why the artifact matters.
 
-The teaching point: finish a hunt by producing evidence another analyst can validate: filename, hash, alert title, severity, time, and device.
+Why this matters: finish a hunt by producing evidence another analyst can validate: filename, hash, alert title, severity, time, and device.
 
 </details>
 
-## Build It Slowly
+## Build The Hunt Step By Step
 
 Mission: validate the classic Mimikatz artifact with a filename, alert verdict, and hash.
 
@@ -1687,13 +1687,13 @@ AlertEvidence
 
 KQL logic to learn: a good hunt answer includes the thing, the verdict, the hash, the time, and the device. That is what makes it repeatable.
 
-## Your CTF Challenge
+## Your Challenge
 
 Which Mimikatz artifact was blocked, and what hash identifies it in alert evidence?
 
-Try to answer this using the build steps first. The full hunt query below is there if students get stuck or want to check their work.
+Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
-## Full Hunt Query (Check Your Work)
+## Full Answer Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1717,7 +1717,7 @@ union isfuzzy=true
 
 
 <details>
-<summary>Answer Key</summary>
+<summary>Full Answer And Explanation</summary>
 
 - Artifact: `mimikatz-x64.zip`
 - Defender verdict: `Mimikatz credential theft tool`
@@ -1732,7 +1732,7 @@ This answer teaches report-ready evidence:
 3. `project ... SHA256` keeps the hash in the output so another analyst can verify the exact file.
 4. Time, device, filename, verdict, and hash together make a complete CTF answer.
 
-Beginner checkpoint: a filename starts the hunt. A hash helps finish it.
+Checkpoint: a filename starts the hunt. A hash helps finish it.
 
 </details>
 
@@ -1788,7 +1788,7 @@ Expected result: all 11 scenarios appear.
 
 ## Wrap-Up Challenge
 
-Students should answer this without help:
+Answer these without the full query first:
 
 1. Which scenarios produced process execution evidence?
 2. Which scenarios were primarily caught through `AlertEvidence`?
