@@ -6,22 +6,20 @@ The class story: a simulated attacker ran a fast credential-access sequence on o
 
 ## Scope
 
-All hunts are intentionally scoped to the workstation where AttackIQ ran. This keeps the lesson realistic for a customer environment where only the test workstation is in scope.
+All hunts are intentionally scoped to the workstation where AttackIQ ran. This keeps the lesson realistic for a customer environment where only the test workstation is in scope. To keep the beginner queries easy, the examples use the last 7 days. Instructors can tighten the time later if needed.
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 ```
 
 Sentinel Data Lake uses `TimeGenerated`. Microsoft Defender XDR Advanced Hunting commonly uses `Timestamp`. If students run these in the XDR portal and the table uses `Timestamp`, swap the time column:
 
 ```kusto
 // Sentinel Data Lake
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 
 // Defender XDR Advanced Hunting
-| where Timestamp between (Start .. End)
+| where Timestamp > ago(7d)
 ```
 
 ## Core Tables
@@ -34,7 +32,7 @@ Sentinel Data Lake uses `TimeGenerated`. Microsoft Defender XDR Advanced Hunting
 
 ## Learning Objectives
 
-- Use `let` statements to control scope and time windows.
+- Use `let` statements to control the target workstation.
 - Filter a single workstation with `DeviceName == TargetDevice`.
 - Hunt process execution in `DeviceProcessEvents`.
 - Hunt staged tools and cleanup in `DeviceFileEvents`.
@@ -53,8 +51,6 @@ For every mini-query, paste the shared scope block first unless it is already in
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 ```
 
 ## KQL 101: How To Read These Queries
@@ -63,7 +59,7 @@ KQL reads from top to bottom. Think of each line as one instruction in a recipe.
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where ProcessCommandLine has "reg save"
 | project TimeGenerated, DeviceName, FileName, ProcessCommandLine
@@ -75,7 +71,7 @@ How to read it:
 - `DeviceProcessEvents`: start with the process table.
 - `|`: pipe the rows into the next step.
 - `where`: keep only rows that match a condition.
-- `between (Start .. End)`: keep only rows inside the time window.
+- `ago(7d)`: look back over the last 7 days.
 - `==`: exact match.
 - `has`: word-based search for one clue.
 - `has_any`: match any clue in a list.
@@ -105,7 +101,7 @@ In KQL form, that usually looks like this:
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where ProcessCommandLine has "keyword"
 | project TimeGenerated, DeviceName, FileName, ProcessCommandLine
@@ -129,7 +125,7 @@ Mini-coach line: do not try to write the perfect query first. Start messy, filte
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "powershell.exe"
 | project TimeGenerated, DeviceName, FileName, ProcessCommandLine
@@ -138,7 +134,7 @@ DeviceProcessEvents
 Beginner translation:
 
 - Start in `DeviceProcessEvents`.
-- Keep only rows during the AttackIQ time window.
+- Keep only rows from the last 7 days.
 - Keep only rows from `usm262346`.
 - Keep only PowerShell process rows.
 - Show the columns that help us explain what ran.
@@ -160,7 +156,7 @@ Common `where` patterns:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has_any ("mimikatz", "rubeus", "lazagne")
 | project TimeGenerated, DeviceName, ActionType, FileName, FolderPath, SHA256
@@ -182,7 +178,7 @@ Mini-exercise: remove `SHA256` and run the query. Add it back. Which output is m
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | summarize ProcessCount=count() by FileName
 | order by ProcessCount desc
@@ -214,7 +210,7 @@ Mini-exercise: use `summarize` to answer, "Which file action happened most often
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | summarize Events=count() by ActionType
 | order by Events desc
@@ -226,7 +222,7 @@ DeviceFileEvents
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | project TimeGenerated, FileName, ProcessCommandLine
 | order by TimeGenerated asc
@@ -253,7 +249,7 @@ KQL example:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "rubeus"
 | project TimeGenerated, FileName, FolderPath, SHA256
@@ -263,7 +259,7 @@ Then pivot into alert evidence:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where FileName has "rubeus" or SHA256 == "1e1fe8a1730bf8caabd867fd2f990b0e52aee0f9f8635578ff8b18c0950b616c"
 | project TimeGenerated, Title, FileName, AttackTechniques, SHA256
 ```
@@ -278,14 +274,14 @@ Sometimes the answer is split across tables. `union` stacks results together.
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName has_any ("pwdump", "gsecdump", "lazagne")
     | project TimeGenerated, EvidenceType="File", Detail=strcat(ActionType, " | ", FileName)
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice or FileName has_any ("pwdump", "gsecdump", "lazagne")
     | project TimeGenerated, EvidenceType="Alert", Detail=strcat(Title, " | ", FileName)
 )
@@ -389,10 +385,8 @@ The beginner mistake is to search the whole tenant first. The better habit is to
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | take 20
 ```
@@ -401,7 +395,7 @@ Now teach the timeline idea. A timeline needs a time column, an evidence type, a
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | project TimeGenerated, EvidenceType="Process", Detail=ProcessCommandLine
 | order by TimeGenerated asc
@@ -413,12 +407,10 @@ Beginner checkpoint: Which column tells you when it happened? Which column tells
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceProcessEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where ProcessCommandLine has_any (".ghostex-cli", "AppData\\Local\\Temp\\aiq", "reg save", "esentutl", "credentials_in_registry", "collect_database_webcache")
     | project TimeGenerated, EvidenceType="Process", Action=FileName,
@@ -426,7 +418,7 @@ union isfuzzy=true
 ),
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FolderPath has_any (".ghostex-cli", "AppData\\Local\\Temp\\aiq")
     | where FileName has_any ("mimikatz", "lazagne", "gsecdump", "pwdump", "rubeus", "kerberoast", "credential", "webcache")
@@ -436,7 +428,7 @@ union isfuzzy=true
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
        or FileName has_any ("mimikatz", "lazagne", "gsecdump", "pwdump", "rubeus", "kerberoast", "credentials_in_registry")
     | project TimeGenerated, EvidenceType="Alert", Action=Title,
@@ -507,7 +499,7 @@ First, teach students where script file activity lives:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "credentials_in_registry.ps1"
 | project TimeGenerated, FileName, FolderPath, ActionType
@@ -517,7 +509,7 @@ Then teach the pivot from file evidence to security meaning:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
 | project TimeGenerated, Title, AttackTechniques, FileName
 ```
@@ -528,26 +520,24 @@ KQL logic to learn: use exact filename matching when the artifact name is known,
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceProcessEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where ProcessCommandLine has "credentials_in_registry.ps1"
     | project TimeGenerated, EvidenceType="Process", FileName, Detail=ProcessCommandLine, AccountName, SHA256
 ),
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName =~ "credentials_in_registry.ps1"
     | project TimeGenerated, EvidenceType="File", FileName, Detail=FolderPath, AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
     | where Title has_any ("PowerShell", "Registry", "Credentials")
        or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
@@ -615,7 +605,7 @@ Start broad enough to see command lines for `cmd.exe`:
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "cmd.exe"
 | project TimeGenerated, FileName, ProcessCommandLine
@@ -625,7 +615,7 @@ Now add the required behavior terms:
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where ProcessCommandLine has_all ("reg save", "hklm\\sam")
 | project TimeGenerated, ProcessCommandLine, AccountName
@@ -637,12 +627,10 @@ KQL logic to learn: `has_all` is for "both of these clues must be present." That
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceProcessEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName =~ "cmd.exe"
     | where ProcessCommandLine has_all ("reg save", "hklm\\sam")
@@ -650,7 +638,7 @@ union isfuzzy=true
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where ProcessCommandLine has_all ("reg save", "hklm\\sam")
        or Title has "RegistryExfil"
@@ -724,7 +712,7 @@ First, find the two process names students care about:
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName in~ ("powershell.exe", "esentutl.exe")
 | project TimeGenerated, FileName, ProcessCommandLine
@@ -734,7 +722,7 @@ Then add the parent process columns:
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "esentutl.exe"
 | project TimeGenerated, FileName, ProcessCommandLine,
@@ -747,10 +735,8 @@ KQL logic to learn: `InitiatingProcessFileName` and `InitiatingProcessCommandLin
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 DeviceProcessEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName in~ ("powershell.exe", "esentutl.exe")
 | where ProcessCommandLine has_any ("collect_database_webcache.ps1", "esentutl", "WebCache")
@@ -821,7 +807,7 @@ Start with file staging:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "Rubeus.exe"
 | project TimeGenerated, FileName, FolderPath, ActionType, SHA256
@@ -831,7 +817,7 @@ Then ask Defender what it thought the file meant:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "Rubeus.exe"
 | project TimeGenerated, Title, AttackTechniques, FileName, SHA256
 ```
@@ -842,19 +828,17 @@ KQL logic to learn: when the process table is quiet, check file and alert tables
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName =~ "Rubeus.exe"
     | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice or FileName =~ "Rubeus.exe"
     | where FileName =~ "Rubeus.exe" or AttackTechniques has_any ("Kerberoasting", "T1558.003")
     | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
@@ -921,7 +905,7 @@ Start by searching for the family name, not one exact file:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "kerberoast"
 | project TimeGenerated, FileName, FolderPath, ActionType
@@ -931,7 +915,7 @@ Then tighten the logic to the expected pair of files:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")
 | project TimeGenerated, FileName, FolderPath, ActionType
@@ -943,19 +927,17 @@ KQL logic to learn: `has` is good for one clue. `has_any` is good when several r
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")
     | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice or FileName has "invoke-kerberoast"
     | where FileName has "invoke-kerberoast" or AttackTechniques has_any ("Kerberoasting", "T1558.003")
     | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
@@ -1026,7 +1008,7 @@ Start with the most beginner-friendly clue: dump files end in `.dmp`.
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName endswith ".dmp"
 | project TimeGenerated, FileName, FolderPath, ActionType
@@ -1036,7 +1018,7 @@ Then connect the file to the detection language:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where Title has_any ("DumpLsass", "LSASS")
 | project TimeGenerated, Title, AttackTechniques, ProcessCommandLine
@@ -1048,19 +1030,17 @@ KQL logic to learn: use `endswith` for extensions and use alert titles to transl
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName endswith ".dmp" or FolderPath has "pid_"
     | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where Title has_any ("DumpLsass", "LSASS") or AttackTechniques has_any ("LSASS Memory", "T1003.001")
     | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", ProcessCommandLine, " | ", AttackTechniques), AccountName, SHA256
@@ -1128,7 +1108,7 @@ First, search file evidence with a simple keyword:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "pwdump"
 | project TimeGenerated, FileName, FolderPath, ActionType
@@ -1138,7 +1118,7 @@ Then search the alert wording:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice or FileName has "pwdump"
 | where FileName has "pwdump" or Title has "PWDump"
 | project TimeGenerated, Title, Severity, FileName
@@ -1150,19 +1130,17 @@ KQL logic to learn: `Title` often tells you the outcome. Words like `prevented` 
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName has "pwdump"
     | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice or FileName has "pwdump"
     | where Title has "PWDump" or FileName has "pwdump"
     | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
@@ -1231,7 +1209,7 @@ Start with the tool name:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "gsecdump"
 | project TimeGenerated, FileName, FolderPath, ActionType
@@ -1241,7 +1219,7 @@ Then search alert evidence with both artifact and detection-family terms:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice or FileName has "gsecdump"
 | where FileName has "gsecdump" or Title has_any ("Vigorf", "malware")
 | project TimeGenerated, Title, Severity, FileName
@@ -1253,19 +1231,17 @@ KQL logic to learn: one table may show the attacker tool name while another tabl
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName has "gsecdump"
     | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice or FileName has "gsecdump"
     | where FileName has "gsecdump" or Title has_any ("Vigorf", "malware")
     | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
@@ -1331,7 +1307,7 @@ Start by finding every LaZagne file event:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "lazagne"
 | project TimeGenerated, FileName, ActionType, FolderPath
@@ -1342,7 +1318,7 @@ Then summarize the lifecycle:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "lazagne"
 | summarize Actions=make_set(ActionType), FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated) by FileName
@@ -1354,19 +1330,17 @@ KQL logic to learn: `summarize` turns many rows into one answer. `make_set(Actio
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName has "lazagne"
     | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice or FileName has "lazagne"
     | where FileName has "lazagne" or AttackTechniques has_any ("Credentials from Password Stores", "T1555")
     | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
@@ -1434,7 +1408,7 @@ Start with the script artifact:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "mimikatz"
 | project TimeGenerated, FileName, FolderPath, ActionType
@@ -1444,7 +1418,7 @@ Then look for Defender's verdict, not only the filename:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice or FileName has "mimikatz"
 | where Title has "Mimikatz credential theft tool" or FileName has "mimikatz"
 | project TimeGenerated, Title, Severity, FileName, SHA256
@@ -1456,19 +1430,17 @@ KQL logic to learn: when tools are renamed, obfuscated, or wrapped in scripts, a
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName =~ "mimikatz_dump_passwords_v2.ps1"
     | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice or FileName =~ "mimikatz_dump_passwords_v2.ps1"
     | where FileName =~ "mimikatz_dump_passwords_v2.ps1" or Title has "Mimikatz credential theft tool"
     | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
@@ -1535,7 +1507,7 @@ Start with the obvious artifact:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "mimikatz-x64.zip"
 | project TimeGenerated, FileName, FolderPath, ActionType, SHA256
@@ -1545,7 +1517,7 @@ Then collect the evidence you would put in a report:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated between (Start .. End)
+| where TimeGenerated > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
 | where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
 | project TimeGenerated, Title, Severity, FileName, SHA256
@@ -1557,19 +1529,17 @@ KQL logic to learn: a good hunt answer includes the thing, the verdict, the hash
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:20:00Z);
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName =~ "mimikatz-x64.zip"
     | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
     | where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
     | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
@@ -1612,21 +1582,19 @@ Use this query to prove every scenario has evidence on the scoped workstation.
 
 ```kusto
 let TargetDevice = "usm262346";
-let Start = datetime(2026-05-04T13:10:00Z);
-let End = datetime(2026-05-04T13:25:00Z);
 let ProcessEvidence =
     DeviceProcessEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | project TimeGenerated, SourceTable="DeviceProcessEvents", DeviceName, FileName, FolderPath, Detail=ProcessCommandLine, Title="", AttackTechniques="";
 let FileEvidence =
     DeviceFileEvents
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice
     | project TimeGenerated, SourceTable="DeviceFileEvents", DeviceName, FileName, FolderPath, Detail=strcat(ActionType, " | ", InitiatingProcessCommandLine), Title="", AttackTechniques="";
 let AlertEvidenceRows =
     AlertEvidence
-    | where TimeGenerated between (Start .. End)
+    | where TimeGenerated > ago(7d)
     | where DeviceName == TargetDevice or FolderPath has_any ("AppData\\Local\\Temp\\aiq", ".ghostex-cli-wd")
     | project TimeGenerated, SourceTable="AlertEvidence", DeviceName=iff(isempty(DeviceName), TargetDevice, DeviceName), FileName, FolderPath, Detail=ProcessCommandLine, Title, AttackTechniques;
 union ProcessEvidence, FileEvidence, AlertEvidenceRows
