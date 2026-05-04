@@ -1,6 +1,6 @@
 # AttackIQ Scenario: Security Control Baseline - Endpoint EDR
 
-This is a KQL teaching lab built from an authorized AttackIQ `Security Control Baseline - Endpoint EDR` run. The goal is not just to show finished queries. The goal is to teach students how to think like hunters: start with one workstation, find clues, pivot across tables, and explain what happened.
+This is a Microsoft Defender XDR Advanced Hunting KQL teaching lab built from an authorized AttackIQ `Security Control Baseline - Endpoint EDR` run. The goal is not just to show finished queries. The goal is to teach students how to think like hunters: start with one workstation, find clues, pivot across tables, and explain what happened.
 
 The class story: a simulated attacker ran a fast credential-access sequence on one workstation. Students have to catch each move with KQL.
 
@@ -12,13 +12,9 @@ All hunts are intentionally scoped to the workstation where AttackIQ ran. This k
 let TargetDevice = "usm262346";
 ```
 
-Sentinel Data Lake uses `TimeGenerated`. Microsoft Defender XDR Advanced Hunting commonly uses `Timestamp`. If students run these in the XDR portal and the table uses `Timestamp`, swap the time column:
+This lab is written for Microsoft Defender XDR Advanced Hunting. The XDR tables in this lesson use `Timestamp` for time filtering:
 
 ```kusto
-// Sentinel Data Lake
-| where TimeGenerated > ago(7d)
-
-// Defender XDR Advanced Hunting
 | where Timestamp > ago(7d)
 ```
 
@@ -59,11 +55,11 @@ KQL reads from top to bottom. Think of each line as one instruction in a recipe.
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where ProcessCommandLine has "reg save"
-| project TimeGenerated, DeviceName, FileName, ProcessCommandLine
-| order by TimeGenerated asc
+| project Timestamp, DeviceName, FileName, ProcessCommandLine
+| order by Timestamp asc
 ```
 
 How to read it:
@@ -101,11 +97,11 @@ In KQL form, that usually looks like this:
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where ProcessCommandLine has "keyword"
-| project TimeGenerated, DeviceName, FileName, ProcessCommandLine
-| order by TimeGenerated asc
+| project Timestamp, DeviceName, FileName, ProcessCommandLine
+| order by Timestamp asc
 ```
 
 What each stage means:
@@ -125,10 +121,10 @@ Mini-coach line: do not try to write the perfect query first. Start messy, filte
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "powershell.exe"
-| project TimeGenerated, DeviceName, FileName, ProcessCommandLine
+| project Timestamp, DeviceName, FileName, ProcessCommandLine
 ```
 
 Beginner translation:
@@ -156,15 +152,15 @@ Common `where` patterns:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has_any ("mimikatz", "rubeus", "lazagne")
-| project TimeGenerated, DeviceName, ActionType, FileName, FolderPath, SHA256
+| project Timestamp, DeviceName, ActionType, FileName, FolderPath, SHA256
 ```
 
 Beginner translation:
 
-- `TimeGenerated`: when did it happen?
+- `Timestamp`: when did it happen?
 - `DeviceName`: where did it happen?
 - `ActionType`: was the file created, deleted, or detected?
 - `FileName` and `FolderPath`: what artifact are we talking about?
@@ -178,7 +174,7 @@ Mini-exercise: remove `SHA256` and run the query. Add it back. Which output is m
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | summarize ProcessCount=count() by FileName
 | order by ProcessCount desc
@@ -200,7 +196,7 @@ Useful summarize patterns:
 | summarize Events=count() by ActionType, FileName
 
 // Show first and last time seen
-| summarize FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated) by FileName
+| summarize FirstSeen=min(Timestamp), LastSeen=max(Timestamp) by FileName
 
 // Collect all actions seen for one file
 | summarize Actions=make_set(ActionType) by FileName
@@ -210,7 +206,7 @@ Mini-exercise: use `summarize` to answer, "Which file action happened most often
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | summarize Events=count() by ActionType
 | order by Events desc
@@ -222,10 +218,10 @@ DeviceFileEvents
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
-| project TimeGenerated, FileName, ProcessCommandLine
-| order by TimeGenerated asc
+| project Timestamp, FileName, ProcessCommandLine
+| order by Timestamp asc
 ```
 
 Beginner translation:
@@ -249,19 +245,19 @@ KQL example:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "rubeus"
-| project TimeGenerated, FileName, FolderPath, SHA256
+| project Timestamp, FileName, FolderPath, SHA256
 ```
 
 Then pivot into alert evidence:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where FileName has "rubeus" or SHA256 == "1e1fe8a1730bf8caabd867fd2f990b0e52aee0f9f8635578ff8b18c0950b616c"
-| project TimeGenerated, Title, FileName, AttackTechniques, SHA256
+| project Timestamp, Title, FileName, AttackTechniques, SHA256
 ```
 
 Mini-coach line: one good clue should create the next query.
@@ -274,18 +270,18 @@ Sometimes the answer is split across tables. `union` stacks results together.
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName has_any ("pwdump", "gsecdump", "lazagne")
-    | project TimeGenerated, EvidenceType="File", Detail=strcat(ActionType, " | ", FileName)
+    | project Timestamp, EvidenceType="File", Detail=strcat(ActionType, " | ", FileName)
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice or FileName has_any ("pwdump", "gsecdump", "lazagne")
-    | project TimeGenerated, EvidenceType="Alert", Detail=strcat(Title, " | ", FileName)
+    | project Timestamp, EvidenceType="Alert", Detail=strcat(Title, " | ", FileName)
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 Beginner translation:
@@ -373,7 +369,7 @@ Why does this warm-up use `union isfuzzy=true` instead of querying only one tabl
 
 Endpoint investigations usually need more than one evidence type. `DeviceProcessEvents` shows execution, `DeviceFileEvents` shows staged or deleted files, and `AlertEvidence` shows Defender verdicts. `union isfuzzy=true` lets students combine those tables even when the projected columns are not identical across every source.
 
-The teaching point: use `project` inside each branch to normalize the output columns, then `order by TimeGenerated asc` to turn separate tables into one readable timeline.
+The teaching point: use `project` inside each branch to normalize the output columns, then `order by Timestamp asc` to turn separate tables into one readable timeline.
 
 </details>
 
@@ -386,7 +382,7 @@ The beginner mistake is to search the whole tenant first. The better habit is to
 ```kusto
 let TargetDevice = "usm262346";
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | take 20
 ```
@@ -395,10 +391,10 @@ Now teach the timeline idea. A timeline needs a time column, an evidence type, a
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
-| project TimeGenerated, EvidenceType="Process", Detail=ProcessCommandLine
-| order by TimeGenerated asc
+| project Timestamp, EvidenceType="Process", Detail=ProcessCommandLine
+| order by Timestamp asc
 ```
 
 Beginner checkpoint: Which column tells you when it happened? Which column tells you what command ran?
@@ -410,31 +406,31 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceProcessEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where ProcessCommandLine has_any (".ghostex-cli", "AppData\\Local\\Temp\\aiq", "reg save", "esentutl", "credentials_in_registry", "collect_database_webcache")
-    | project TimeGenerated, EvidenceType="Process", Action=FileName,
+    | project Timestamp, EvidenceType="Process", Action=FileName,
               Detail=ProcessCommandLine, Source=InitiatingProcessCommandLine
 ),
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FolderPath has_any (".ghostex-cli", "AppData\\Local\\Temp\\aiq")
     | where FileName has_any ("mimikatz", "lazagne", "gsecdump", "pwdump", "rubeus", "kerberoast", "credential", "webcache")
        or FileName endswith ".dmp"
-    | project TimeGenerated, EvidenceType="File", Action=ActionType,
+    | project Timestamp, EvidenceType="File", Action=ActionType,
               Detail=strcat(FolderPath, "\\", FileName), Source=InitiatingProcessCommandLine
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
        or FileName has_any ("mimikatz", "lazagne", "gsecdump", "pwdump", "rubeus", "kerberoast", "credentials_in_registry")
-    | project TimeGenerated, EvidenceType="Alert", Action=Title,
+    | project Timestamp, EvidenceType="Alert", Action=Title,
               Detail=strcat(EntityType, " | ", FileName, " | ", ProcessCommandLine), Source=ServiceSource
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -456,8 +452,8 @@ Read the warm-up query like this:
 1. `DeviceProcessEvents` looks for commands that ran.
 2. `DeviceFileEvents` looks for tools and scripts that appeared on disk.
 3. `AlertEvidence` looks for Defender's security interpretation.
-4. Each branch uses `project` to rename different columns into the same story columns: `TimeGenerated`, `EvidenceType`, `Action`, `Detail`, and `Source`.
-5. `order by TimeGenerated asc` turns all three evidence types into one timeline.
+4. Each branch uses `project` to rename different columns into the same story columns: `Timestamp`, `EvidenceType`, `Action`, `Detail`, and `Source`.
+5. `order by Timestamp asc` turns all three evidence types into one timeline.
 
 Beginner checkpoint: when you see `union`, ask, "What tables are being combined, and did we make their output columns match?"
 
@@ -499,19 +495,19 @@ First, teach students where script file activity lives:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "credentials_in_registry.ps1"
-| project TimeGenerated, FileName, FolderPath, ActionType
+| project Timestamp, FileName, FolderPath, ActionType
 ```
 
 Then teach the pivot from file evidence to security meaning:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
-| project TimeGenerated, Title, AttackTechniques, FileName
+| project Timestamp, Title, AttackTechniques, FileName
 ```
 
 KQL logic to learn: use exact filename matching when the artifact name is known, then use `project` to keep only the columns that answer the CTF question.
@@ -523,27 +519,27 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceProcessEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where ProcessCommandLine has "credentials_in_registry.ps1"
-    | project TimeGenerated, EvidenceType="Process", FileName, Detail=ProcessCommandLine, AccountName, SHA256
+    | project Timestamp, EvidenceType="Process", FileName, Detail=ProcessCommandLine, AccountName, SHA256
 ),
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName =~ "credentials_in_registry.ps1"
-    | project TimeGenerated, EvidenceType="File", FileName, Detail=FolderPath, AccountName=InitiatingProcessAccountName, SHA256
+    | project Timestamp, EvidenceType="File", FileName, Detail=FolderPath, AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
     | where Title has_any ("PowerShell", "Registry", "Credentials")
        or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
-    | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
+    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -605,20 +601,20 @@ Start broad enough to see command lines for `cmd.exe`:
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "cmd.exe"
-| project TimeGenerated, FileName, ProcessCommandLine
+| project Timestamp, FileName, ProcessCommandLine
 ```
 
 Now add the required behavior terms:
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where ProcessCommandLine has_all ("reg save", "hklm\\sam")
-| project TimeGenerated, ProcessCommandLine, AccountName
+| project Timestamp, ProcessCommandLine, AccountName
 ```
 
 KQL logic to learn: `has_all` is for "both of these clues must be present." That is different from `has_any`, where only one clue has to match.
@@ -630,21 +626,21 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceProcessEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName =~ "cmd.exe"
     | where ProcessCommandLine has_all ("reg save", "hklm\\sam")
-    | project TimeGenerated, EvidenceType="Process", FileName, Detail=ProcessCommandLine, AccountName, SHA256
+    | project Timestamp, EvidenceType="Process", FileName, Detail=ProcessCommandLine, AccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where ProcessCommandLine has_all ("reg save", "hklm\\sam")
        or Title has "RegistryExfil"
-    | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", ProcessCommandLine, " | ", AttackTechniques), AccountName, SHA256
+    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", ProcessCommandLine, " | ", AttackTechniques), AccountName, SHA256
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -672,7 +668,7 @@ The important beginner logic is the command-line filter:
 
 Read it as: keep only process rows where the command line contains both clues. `reg save` tells us the registry was being exported. `hklm\sam` tells us the SAM hive was the target.
 
-Then `project TimeGenerated, FileName, Detail=ProcessCommandLine` keeps the columns needed to answer: when it happened, which process ran, and the exact command.
+Then `project Timestamp, FileName, Detail=ProcessCommandLine` keeps the columns needed to answer: when it happened, which process ran, and the exact command.
 
 </details>
 
@@ -712,20 +708,20 @@ First, find the two process names students care about:
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName in~ ("powershell.exe", "esentutl.exe")
-| project TimeGenerated, FileName, ProcessCommandLine
+| project Timestamp, FileName, ProcessCommandLine
 ```
 
 Then add the parent process columns:
 
 ```kusto
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "esentutl.exe"
-| project TimeGenerated, FileName, ProcessCommandLine,
+| project Timestamp, FileName, ProcessCommandLine,
           InitiatingProcessFileName, InitiatingProcessCommandLine
 ```
 
@@ -736,14 +732,14 @@ KQL logic to learn: `InitiatingProcessFileName` and `InitiatingProcessCommandLin
 ```kusto
 let TargetDevice = "usm262346";
 DeviceProcessEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName in~ ("powershell.exe", "esentutl.exe")
 | where ProcessCommandLine has_any ("collect_database_webcache.ps1", "esentutl", "WebCache")
    or InitiatingProcessCommandLine has "collect_database_webcache.ps1"
-| project TimeGenerated, FileName, ProcessCommandLine, InitiatingProcessFileName,
+| project Timestamp, FileName, ProcessCommandLine, InitiatingProcessFileName,
           InitiatingProcessCommandLine, AccountName, SHA256
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -807,19 +803,19 @@ Start with file staging:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "Rubeus.exe"
-| project TimeGenerated, FileName, FolderPath, ActionType, SHA256
+| project Timestamp, FileName, FolderPath, ActionType, SHA256
 ```
 
 Then ask Defender what it thought the file meant:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "Rubeus.exe"
-| project TimeGenerated, Title, AttackTechniques, FileName, SHA256
+| project Timestamp, Title, AttackTechniques, FileName, SHA256
 ```
 
 KQL logic to learn: when the process table is quiet, check file and alert tables before deciding nothing happened.
@@ -831,19 +827,19 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName =~ "Rubeus.exe"
-    | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
+    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice or FileName =~ "Rubeus.exe"
     | where FileName =~ "Rubeus.exe" or AttackTechniques has_any ("Kerberoasting", "T1558.003")
-    | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
+    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -905,20 +901,20 @@ Start by searching for the family name, not one exact file:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "kerberoast"
-| project TimeGenerated, FileName, FolderPath, ActionType
+| project Timestamp, FileName, FolderPath, ActionType
 ```
 
 Then tighten the logic to the expected pair of files:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")
-| project TimeGenerated, FileName, FolderPath, ActionType
+| project Timestamp, FileName, FolderPath, ActionType
 ```
 
 KQL logic to learn: `has` is good for one clue. `has_any` is good when several related clue words can identify the same scenario.
@@ -930,19 +926,19 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")
-    | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
+    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice or FileName has "invoke-kerberoast"
     | where FileName has "invoke-kerberoast" or AttackTechniques has_any ("Kerberoasting", "T1558.003")
-    | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
+    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -1008,20 +1004,20 @@ Start with the most beginner-friendly clue: dump files end in `.dmp`.
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName endswith ".dmp"
-| project TimeGenerated, FileName, FolderPath, ActionType
+| project Timestamp, FileName, FolderPath, ActionType
 ```
 
 Then connect the file to the detection language:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where Title has_any ("DumpLsass", "LSASS")
-| project TimeGenerated, Title, AttackTechniques, ProcessCommandLine
+| project Timestamp, Title, AttackTechniques, ProcessCommandLine
 ```
 
 KQL logic to learn: use `endswith` for extensions and use alert titles to translate a suspicious file into attacker behavior.
@@ -1033,19 +1029,19 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName endswith ".dmp" or FolderPath has "pid_"
-    | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
+    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where Title has_any ("DumpLsass", "LSASS") or AttackTechniques has_any ("LSASS Memory", "T1003.001")
-    | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", ProcessCommandLine, " | ", AttackTechniques), AccountName, SHA256
+    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", ProcessCommandLine, " | ", AttackTechniques), AccountName, SHA256
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -1108,20 +1104,20 @@ First, search file evidence with a simple keyword:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "pwdump"
-| project TimeGenerated, FileName, FolderPath, ActionType
+| project Timestamp, FileName, FolderPath, ActionType
 ```
 
 Then search the alert wording:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName has "pwdump"
 | where FileName has "pwdump" or Title has "PWDump"
-| project TimeGenerated, Title, Severity, FileName
+| project Timestamp, Title, Severity, FileName
 ```
 
 KQL logic to learn: `Title` often tells you the outcome. Words like `prevented` or `blocked` change the story from execution to attempted execution.
@@ -1133,19 +1129,19 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName has "pwdump"
-    | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
+    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice or FileName has "pwdump"
     | where Title has "PWDump" or FileName has "pwdump"
-    | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
+    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -1165,7 +1161,7 @@ The answer comes from comparing file evidence with alert evidence:
 
 1. `DeviceFileEvents | where FileName has "pwdump"` finds the staged artifact.
 2. `AlertEvidence | where Title has "PWDump"` finds Defender's verdict.
-3. `project TimeGenerated, EvidenceType, FileName, Detail` keeps the result readable.
+3. `project Timestamp, EvidenceType, FileName, Detail` keeps the result readable.
 
 The word `prevented` in the alert title matters. It tells students this was an attempted credential dump, not clean execution.
 
@@ -1209,20 +1205,20 @@ Start with the tool name:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "gsecdump"
-| project TimeGenerated, FileName, FolderPath, ActionType
+| project Timestamp, FileName, FolderPath, ActionType
 ```
 
 Then search alert evidence with both artifact and detection-family terms:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName has "gsecdump"
 | where FileName has "gsecdump" or Title has_any ("Vigorf", "malware")
-| project TimeGenerated, Title, Severity, FileName
+| project Timestamp, Title, Severity, FileName
 ```
 
 KQL logic to learn: one table may show the attacker tool name while another table shows the security product's malware family name.
@@ -1234,19 +1230,19 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName has "gsecdump"
-    | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
+    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice or FileName has "gsecdump"
     | where FileName has "gsecdump" or Title has_any ("Vigorf", "malware")
-    | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
+    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -1307,21 +1303,21 @@ Start by finding every LaZagne file event:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "lazagne"
-| project TimeGenerated, FileName, ActionType, FolderPath
-| order by TimeGenerated asc
+| project Timestamp, FileName, ActionType, FolderPath
+| order by Timestamp asc
 ```
 
 Then summarize the lifecycle:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "lazagne"
-| summarize Actions=make_set(ActionType), FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated) by FileName
+| summarize Actions=make_set(ActionType), FirstSeen=min(Timestamp), LastSeen=max(Timestamp) by FileName
 ```
 
 KQL logic to learn: `summarize` turns many rows into one answer. `make_set(ActionType)` shows all actions seen for the file.
@@ -1333,19 +1329,19 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName has "lazagne"
-    | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
+    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice or FileName has "lazagne"
     | where FileName has "lazagne" or AttackTechniques has_any ("Credentials from Password Stores", "T1555")
-    | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
+    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -1364,8 +1360,8 @@ How do we know the tool was cleaned up after staging?
 This scenario teaches file lifecycle:
 
 1. `FileName has "lazagne"` finds all file events for the tool.
-2. `project TimeGenerated, ActionType, FileName, FolderPath` keeps the lifecycle visible.
-3. `order by TimeGenerated asc` shows creation before deletion.
+2. `project Timestamp, ActionType, FileName, FolderPath` keeps the lifecycle visible.
+3. `order by Timestamp asc` shows creation before deletion.
 4. Optional: `summarize Actions=make_set(ActionType) by FileName` rolls multiple rows into one answer.
 
 Beginner checkpoint: `ActionType` is the column that tells you whether the file was created, deleted, or changed.
@@ -1408,20 +1404,20 @@ Start with the script artifact:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "mimikatz"
-| project TimeGenerated, FileName, FolderPath, ActionType
+| project Timestamp, FileName, FolderPath, ActionType
 ```
 
 Then look for Defender's verdict, not only the filename:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName has "mimikatz"
 | where Title has "Mimikatz credential theft tool" or FileName has "mimikatz"
-| project TimeGenerated, Title, Severity, FileName, SHA256
+| project Timestamp, Title, Severity, FileName, SHA256
 ```
 
 KQL logic to learn: when tools are renamed, obfuscated, or wrapped in scripts, alert titles and behavior labels may be better clues than process names.
@@ -1433,19 +1429,19 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName =~ "mimikatz_dump_passwords_v2.ps1"
-    | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
+    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice or FileName =~ "mimikatz_dump_passwords_v2.ps1"
     | where FileName =~ "mimikatz_dump_passwords_v2.ps1" or Title has "Mimikatz credential theft tool"
-    | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
+    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -1507,20 +1503,20 @@ Start with the obvious artifact:
 
 ```kusto
 DeviceFileEvents
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "mimikatz-x64.zip"
-| project TimeGenerated, FileName, FolderPath, ActionType, SHA256
+| project Timestamp, FileName, FolderPath, ActionType, SHA256
 ```
 
 Then collect the evidence you would put in a report:
 
 ```kusto
 AlertEvidence
-| where TimeGenerated > ago(7d)
+| where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
 | where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
-| project TimeGenerated, Title, Severity, FileName, SHA256
+| project Timestamp, Title, Severity, FileName, SHA256
 ```
 
 KQL logic to learn: a good hunt answer includes the thing, the verdict, the hash, the time, and the device. That is what makes it repeatable.
@@ -1532,19 +1528,19 @@ let TargetDevice = "usm262346";
 union isfuzzy=true
 (
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
     | where FileName =~ "mimikatz-x64.zip"
-    | project TimeGenerated, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
+    | project Timestamp, EvidenceType="File", FileName, Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ),
 (
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
     | where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
-    | project TimeGenerated, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
+    | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", Severity), AccountName, SHA256
 )
-| order by TimeGenerated asc
+| order by Timestamp asc
 ```
 
 ## CTF Question
@@ -1584,19 +1580,19 @@ Use this query to prove every scenario has evidence on the scoped workstation.
 let TargetDevice = "usm262346";
 let ProcessEvidence =
     DeviceProcessEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
-    | project TimeGenerated, SourceTable="DeviceProcessEvents", DeviceName, FileName, FolderPath, Detail=ProcessCommandLine, Title="", AttackTechniques="";
+    | project Timestamp, SourceTable="DeviceProcessEvents", DeviceName, FileName, FolderPath, Detail=ProcessCommandLine, Title="", AttackTechniques="";
 let FileEvidence =
     DeviceFileEvents
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
-    | project TimeGenerated, SourceTable="DeviceFileEvents", DeviceName, FileName, FolderPath, Detail=strcat(ActionType, " | ", InitiatingProcessCommandLine), Title="", AttackTechniques="";
+    | project Timestamp, SourceTable="DeviceFileEvents", DeviceName, FileName, FolderPath, Detail=strcat(ActionType, " | ", InitiatingProcessCommandLine), Title="", AttackTechniques="";
 let AlertEvidenceRows =
     AlertEvidence
-    | where TimeGenerated > ago(7d)
+    | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice or FolderPath has_any ("AppData\\Local\\Temp\\aiq", ".ghostex-cli-wd")
-    | project TimeGenerated, SourceTable="AlertEvidence", DeviceName=iff(isempty(DeviceName), TargetDevice, DeviceName), FileName, FolderPath, Detail=ProcessCommandLine, Title, AttackTechniques;
+    | project Timestamp, SourceTable="AlertEvidence", DeviceName=iff(isempty(DeviceName), TargetDevice, DeviceName), FileName, FolderPath, Detail=ProcessCommandLine, Title, AttackTechniques;
 union ProcessEvidence, FileEvidence, AlertEvidenceRows
 | extend EvidenceText = strcat(FileName, " ", FolderPath, " ", Detail, " ", Title, " ", AttackTechniques)
 | extend Scenario = case(
@@ -1613,7 +1609,7 @@ union ProcessEvidence, FileEvidence, AlertEvidenceRows
     EvidenceText has "mimikatz-x64.zip", "11 - Dump Windows Passwords with Original Mimikatz",
     "Other")
 | where Scenario != "Other"
-| summarize FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated), EvidenceRows=count(), Tables=make_set(SourceTable, 5), Example=any(strcat(SourceTable, " | ", Title, " | ", FileName, " | ", Detail)) by Scenario
+| summarize FirstSeen=min(Timestamp), LastSeen=max(Timestamp), EvidenceRows=count(), Tables=make_set(SourceTable, 5), Example=any(strcat(SourceTable, " | ", Title, " | ", FileName, " | ", Detail)) by Scenario
 | order by Scenario asc
 ```
 
