@@ -500,6 +500,7 @@ DeviceProcessEvents
 Now teach the timeline idea. A timeline needs a time column, an evidence type, and a detail column:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceProcessEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -607,6 +608,7 @@ Mission: find a PowerShell script related to credentials in the registry.
 First, teach students where script file activity lives:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -617,6 +619,7 @@ DeviceFileEvents
 Then teach the pivot from file evidence to security meaning:
 
 ```kusto
+let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
@@ -716,6 +719,7 @@ Mission: find a command that saved the local SAM registry hive.
 Start broad enough to see command lines for `cmd.exe`:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceProcessEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -726,6 +730,7 @@ DeviceProcessEvents
 Now add the required behavior terms:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceProcessEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -826,6 +831,7 @@ Mission: prove that browser/WebCache collection happened and show the parent-chi
 First, find the two process names students care about:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceProcessEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -836,6 +842,7 @@ DeviceProcessEvents
 Then add the parent process columns:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceProcessEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -924,6 +931,7 @@ Mission: catch Rubeus even if Defender blocked it before normal execution.
 Start with file staging:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -934,6 +942,7 @@ DeviceFileEvents
 Then ask Defender what it thought the file meant:
 
 ```kusto
+let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "Rubeus.exe"
@@ -1025,6 +1034,7 @@ Mission: find the PowerShell Kerberoasting files.
 Start by searching for the family name, not one exact file:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -1035,6 +1045,7 @@ DeviceFileEvents
 Then tighten the logic to the expected pair of files:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -1131,6 +1142,7 @@ Mission: catch LSASS dumping even when the dump filename is not predictable.
 Start with the most beginner-friendly clue: dump files end in `.dmp`.
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -1141,6 +1153,7 @@ DeviceFileEvents
 Then connect the file to the detection language:
 
 ```kusto
+let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -1234,6 +1247,7 @@ Mission: prove PwDump was attempted and explain whether it ran or was blocked.
 First, search file evidence with a simple keyword:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -1244,6 +1258,7 @@ DeviceFileEvents
 Then search the alert wording:
 
 ```kusto
+let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName has "pwdump"
@@ -1338,6 +1353,7 @@ Mission: connect the staged `gsecdump` artifact to Defender's different detectio
 Start with the tool name:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -1348,6 +1364,7 @@ DeviceFileEvents
 Then search alert evidence with both artifact and detection-family terms:
 
 ```kusto
+let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName has "gsecdump"
@@ -1439,6 +1456,7 @@ Mission: show that LaZagne appeared on disk and was later removed.
 Start by finding every LaZagne file event:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -1450,6 +1468,7 @@ DeviceFileEvents
 Then summarize the lifecycle:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -1543,6 +1562,7 @@ Mission: catch a Mimikatz-style attack that does not show up as `mimikatz.exe`.
 Start with the script artifact:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -1553,6 +1573,7 @@ DeviceFileEvents
 Then look for Defender's verdict, not only the filename:
 
 ```kusto
+let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName has "mimikatz"
@@ -1645,6 +1666,7 @@ Mission: validate the classic Mimikatz artifact with a filename, alert verdict, 
 Start with the obvious artifact:
 
 ```kusto
+let TargetDevice = "usm262346";
 DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
@@ -1655,6 +1677,7 @@ DeviceFileEvents
 Then collect the evidence you would put in a report:
 
 ```kusto
+let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
