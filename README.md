@@ -89,6 +89,241 @@ How to read it:
 
 Beginner habit: every answer should prove four things when possible: **when**, **where**, **what**, and **why it matters**.
 
+## Pre-CTF KQL Refresher
+
+Before the CTF starts, students should practice the handful of KQL moves they will use over and over. This is the warm-up gym. Keep it light, fast, and interactive.
+
+### Query Construction Flow
+
+Every hunt in this lab follows the same pattern:
+
+```text
+Data table -> Filter -> Analyze or pivot -> Present evidence
+```
+
+In KQL form, that usually looks like this:
+
+```kusto
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where ProcessCommandLine has "keyword"
+| project TimeGenerated, DeviceName, FileName, ProcessCommandLine
+| order by TimeGenerated asc
+```
+
+What each stage means:
+
+| Stage | KQL move | Student question |
+|---|---|---|
+| Data table | `DeviceProcessEvents` | Where does this kind of evidence live? |
+| Filter | `where` | How do I reduce noise? |
+| Analyze or pivot | `summarize`, parent columns, hashes, alerts | What pattern or next clue appears? |
+| Present evidence | `project`, `order by` | What columns prove my answer? |
+
+Mini-coach line: do not try to write the perfect query first. Start messy, filter down, then clean up the output.
+
+### Refresher 1: Filtering With `where`
+
+`where` keeps rows that match your condition. It is the most important beginner operator.
+
+```kusto
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName =~ "powershell.exe"
+| project TimeGenerated, DeviceName, FileName, ProcessCommandLine
+```
+
+Beginner translation:
+
+- Start in `DeviceProcessEvents`.
+- Keep only rows during the AttackIQ time window.
+- Keep only rows from `usm262346`.
+- Keep only PowerShell process rows.
+- Show the columns that help us explain what ran.
+
+Common `where` patterns:
+
+| Pattern | Example | Use it when |
+|---|---|---|
+| Exact match | `DeviceName == TargetDevice` | The value must match exactly. |
+| Case-insensitive exact match | `FileName =~ "powershell.exe"` | You know the exact filename. |
+| One keyword | `ProcessCommandLine has "reg save"` | One clue is enough. |
+| Any keyword from a list | `FileName has_any ("mimikatz", "rubeus", "lazagne")` | Several clues can identify the scenario. |
+| All keywords required | `ProcessCommandLine has_all ("reg save", "hklm\\sam")` | The behavior needs multiple clues together. |
+| File extension | `FileName endswith ".dmp"` | The exact filename may be random. |
+
+### Refresher 2: Choosing Columns With `project`
+
+`project` is how students turn noisy raw telemetry into readable evidence.
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName has_any ("mimikatz", "rubeus", "lazagne")
+| project TimeGenerated, DeviceName, ActionType, FileName, FolderPath, SHA256
+```
+
+Beginner translation:
+
+- `TimeGenerated`: when did it happen?
+- `DeviceName`: where did it happen?
+- `ActionType`: was the file created, deleted, or detected?
+- `FileName` and `FolderPath`: what artifact are we talking about?
+- `SHA256`: how can another analyst verify the same file?
+
+Mini-exercise: remove `SHA256` and run the query. Add it back. Which output is more useful for an incident report?
+
+### Refresher 3: Counting With `summarize`
+
+`summarize` groups rows into an answer. It is perfect when the CTF asks "how many" or "which ones."
+
+```kusto
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| summarize ProcessCount=count() by FileName
+| order by ProcessCount desc
+```
+
+Beginner translation:
+
+- Look at process events on the test workstation.
+- Count how many rows each `FileName` produced.
+- Sort the biggest counts first.
+
+Useful summarize patterns:
+
+```kusto
+// Count events by process
+| summarize Events=count() by FileName
+
+// Count events by file action
+| summarize Events=count() by ActionType, FileName
+
+// Show first and last time seen
+| summarize FirstSeen=min(TimeGenerated), LastSeen=max(TimeGenerated) by FileName
+
+// Collect all actions seen for one file
+| summarize Actions=make_set(ActionType) by FileName
+```
+
+Mini-exercise: use `summarize` to answer, "Which file action happened most often during the AttackIQ run?"
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| summarize Events=count() by ActionType
+| order by Events desc
+```
+
+### Refresher 4: Sorting With `order by`
+
+`order by` turns results into a story. For timelines, sort oldest to newest.
+
+```kusto
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| project TimeGenerated, FileName, ProcessCommandLine
+| order by TimeGenerated asc
+```
+
+Beginner translation:
+
+- `asc` means ascending: oldest first.
+- `desc` means descending: newest or largest first.
+- Use `asc` for timelines.
+- Use `desc` for counts and top talkers.
+
+### Refresher 5: Pivoting Like A Hunter
+
+A pivot means: take one clue from your first result and use it in the next query.
+
+Example flow:
+
+```text
+Find suspicious file -> copy filename -> search alerts -> copy hash -> search file events
+```
+
+KQL example:
+
+```kusto
+DeviceFileEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where FileName has "rubeus"
+| project TimeGenerated, FileName, FolderPath, SHA256
+```
+
+Then pivot into alert evidence:
+
+```kusto
+AlertEvidence
+| where TimeGenerated between (Start .. End)
+| where FileName has "rubeus" or SHA256 == "1e1fe8a1730bf8caabd867fd2f990b0e52aee0f9f8635578ff8b18c0950b616c"
+| project TimeGenerated, Title, FileName, AttackTechniques, SHA256
+```
+
+Mini-coach line: one good clue should create the next query.
+
+### Refresher 6: Combining Tables With `union`
+
+Sometimes the answer is split across tables. `union` stacks results together.
+
+```kusto
+union isfuzzy=true
+(
+    DeviceFileEvents
+    | where TimeGenerated between (Start .. End)
+    | where DeviceName == TargetDevice
+    | where FileName has_any ("pwdump", "gsecdump", "lazagne")
+    | project TimeGenerated, EvidenceType="File", Detail=strcat(ActionType, " | ", FileName)
+),
+(
+    AlertEvidence
+    | where TimeGenerated between (Start .. End)
+    | where DeviceName == TargetDevice or FileName has_any ("pwdump", "gsecdump", "lazagne")
+    | project TimeGenerated, EvidenceType="Alert", Detail=strcat(Title, " | ", FileName)
+)
+| order by TimeGenerated asc
+```
+
+Beginner translation:
+
+- First branch: file evidence.
+- Second branch: alert evidence.
+- `project` makes both branches output the same columns.
+- `order by` turns the combined result into a timeline.
+
+Mini-exercise: add `"mimikatz"` to both `has_any` lists. What new evidence appears?
+
+### Pre-CTF Practice Round
+
+Before opening Scenario 01, have students answer these quick questions:
+
+1. Which table shows process command lines?
+2. Which table shows files created or deleted?
+3. Which table shows Defender alert titles and ATT&CK techniques?
+4. Which operator would you use for an exact workstation match?
+5. Which operator would you use when either `mimikatz`, `rubeus`, or `lazagne` should match?
+6. Which operator would you use when both `reg save` and `hklm\sam` must be present?
+
+<details>
+<summary>Pre-CTF Practice Answers</summary>
+
+1. `DeviceProcessEvents`
+2. `DeviceFileEvents`
+3. `AlertEvidence`
+4. `==`
+5. `has_any`
+6. `has_all`
+
+</details>
+
 ## Run Context
 
 | Field | Value |
