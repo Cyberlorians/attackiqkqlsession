@@ -54,7 +54,7 @@ For every mini-query, paste the shared scope block first unless it is already in
 let TargetDevice = "usm262346";
 ```
 
-When a step-by-step query changes columns, it is changing the question. Early queries often keep orientation columns such as `FolderPath` and `ActionType` so you can see where a file lived and what happened to it. Later queries keep answer columns such as `Title`, `AttackTechniques`, `Severity`, or `SHA256` so you can explain the security meaning. The column list should always match the question being answered in that moment.
+When a step-by-step query changes columns, the question changed too. File rows usually need `FolderPath` and `ActionType`. Alert rows usually need `Title`, `AttackTechniques`, or `Severity`. If a column matters later, the practice query should keep it or explain why it changed.
 
 <details open>
 <summary><strong>KQL 101: How To Read These Queries</strong></summary>
@@ -503,19 +503,48 @@ DeviceProcessEvents
 | take 20
 ```
 
-Now shape the rows into a timeline. A timeline needs a time column, an evidence type, an action, and a detail column:
+Now filter to likely AttackIQ clues and shape the process rows into timeline columns:
 
 ```kusto
 let TargetDevice = "usm262346";
 DeviceProcessEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
+| where ProcessCommandLine has_any (".ghostex-cli", "AppData\\Local\\Temp\\aiq", "reg save", "esentutl", "credentials_in_registry", "collect_database_webcache")
 | project Timestamp, EvidenceType="Process", Action=FileName,
           Detail=ProcessCommandLine, Source=InitiatingProcessCommandLine
 | order by Timestamp asc
 ```
 
-Checkpoint: Which column tells you when it happened? Which column tells you what process ran? Which column tells you the command line?
+Add file rows using the same story columns:
+
+```kusto
+let TargetDevice = "usm262346";
+DeviceFileEvents
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice
+| where FolderPath has_any (".ghostex-cli", "AppData\\Local\\Temp\\aiq")
+| where FileName has_any ("mimikatz", "lazagne", "gsecdump", "pwdump", "rubeus", "kerberoast", "credential", "webcache")
+    or FileName endswith ".dmp"
+| project Timestamp, EvidenceType="File", Action=ActionType,
+          Detail=strcat(FolderPath, "\\", FileName), Source=InitiatingProcessCommandLine
+| order by Timestamp asc
+```
+
+Add alert rows using the same story columns:
+
+```kusto
+let TargetDevice = "usm262346";
+AlertEvidence
+| where Timestamp > ago(7d)
+| where DeviceName == TargetDevice
+    or FileName has_any ("mimikatz", "lazagne", "gsecdump", "pwdump", "rubeus", "kerberoast", "credentials_in_registry")
+| project Timestamp, EvidenceType="Alert", Action=Title,
+          Detail=strcat(EntityType, " | ", FileName, " | ", ProcessCommandLine), Source=ServiceSource
+| order by Timestamp asc
+```
+
+Checkpoint: all three practice queries now output `Timestamp`, `EvidenceType`, `Action`, `Detail`, and `Source`. The full answer puts those same branches inside one `union`.
 
 </details>
 
@@ -588,7 +617,7 @@ The attacker tries to abuse the registry as a place where credential material ca
 
 ## Your Challenge
 
-Which script is the registry-creds clue, and which ATT&CK technique did Defender attach to it?
+What is the exact PowerShell script filename, and which ATT&CK technique did Defender attach to it?
 
 Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
@@ -603,7 +632,7 @@ When you know the suspicious script name, which KQL pattern helps you prove both
 <details>
 <summary>Break Down The KQL</summary>
 
-Use the script name as the anchor in more than one table. In this scenario, `FileName =~ "credentials_in_registry.ps1"` finds the staged file, while `AttackTechniques has_any ("Credentials in Registry", "T1552.002")` connects the behavior to the Defender/ATT&CK context.
+Use the script name as the anchor in more than one table. In this scenario, `FileName =~ "credentials_in_registry.ps1"` finds the staged file, while `AttackTechniques has_any ("Credentials in Registry", "T1552.002")` shows the ATT&CK technique Defender attached to it.
 
 Why this matters: `=~` is a case-insensitive exact match, which is good when the filename is known. `has_any` is better for matching one of several alert or technique clues.
 
@@ -624,17 +653,21 @@ DeviceFileEvents
 
 Why these columns: `FolderPath` shows where the script landed, and `ActionType` shows what file action happened. They are file-evidence columns, so they help you understand staging.
 
-Then pivot from file evidence to security meaning:
+Then pivot from file evidence to alert evidence:
 
 ```kusto
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "credentials_in_registry.ps1"
-| project Timestamp, Title, AttackTechniques, FileName
+| where Title has_any ("PowerShell", "Registry", "Credentials")
+    or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
+| project Timestamp, Title, FileName, AttackTechniques, SHA256
 ```
 
-Why the columns changed: this query moved from `DeviceFileEvents` to `AlertEvidence`. `FolderPath` and `ActionType` answered the file-staging question; `Title` and `AttackTechniques` answer the security-meaning question. The full answer also adds `SHA256` because a hash is useful evidence once you know the row matters.
+Why the columns changed: the table changed. `FolderPath` and `ActionType` helped with file staging. `Title`, `AttackTechniques`, and `SHA256` help with the alert answer.
+
+The full answer uses the alert query because the challenge asks for Defender's ATT&CK mapping. The file query is just the warm-up that helps you find the artifact.
 
 KQL logic to learn: use exact filename matching when the artifact name is known, then use `project` to keep only the columns that answer the CTF question.
 
@@ -922,10 +955,11 @@ DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName =~ "Rubeus.exe"
-| project Timestamp, FileName, FolderPath, ActionType, SHA256
+| project Timestamp, EvidenceType="File", FileName,
+          Detail=strcat(ActionType, " | ", FolderPath), AccountName=InitiatingProcessAccountName, SHA256
 ```
 
-Why these columns: `FolderPath` and `ActionType` prove the file was staged, while `SHA256` gives you the durable file identifier.
+Why these columns: `EvidenceType` tells you which table the row came from. `Detail` keeps the file action and path together. `SHA256` identifies the file.
 
 Then ask Defender what it thought the file meant:
 
@@ -934,10 +968,12 @@ let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "Rubeus.exe"
-| project Timestamp, Title, AttackTechniques, FileName, SHA256
+| where FileName =~ "Rubeus.exe" or AttackTechniques has_any ("Kerberoasting", "T1558.003")
+| project Timestamp, EvidenceType="Alert", FileName,
+          Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
 ```
 
-Why the columns changed: the second query is no longer asking where the file was written. It is asking how Defender classified it, so `Title` and `AttackTechniques` become the important columns.
+Notice the shape is the same now: both practice queries output `Timestamp`, `EvidenceType`, `FileName`, `Detail`, `AccountName`, and `SHA256`. The full answer simply combines them with `union`.
 
 KQL logic to learn: when the process table is quiet, check file and alert tables before deciding nothing happened.
 
@@ -1003,7 +1039,7 @@ Use the step-by-step queries first. After you have an answer, compare it with th
 
 ## KQL Skill
 
-Hunt script staging first, then pivot to alert evidence and ATT&CK context.
+Use `has_any` to find both Kerberoast script files, then summarize their file events.
 
 ## How To Think About The Query
 
@@ -1065,7 +1101,7 @@ DeviceFileEvents
 
 - `call-invoke-kerberoast.ps1`
 - `invoke-kerberoast.ps1`
-- Defender generated detections tied to `invoke-kerberoast.ps1`.
+- These file rows are the staged Kerberoast script evidence.
 
 ### How The KQL Finds It
 
@@ -1096,7 +1132,7 @@ The attacker tries to dump LSASS. A dump file lands in temp with a generated nam
 
 ## Your Challenge
 
-What dump file was created, where did it land, and what hash identifies it?
+What dump file was created, and where did it land?
 
 Use the step-by-step queries first. After you have an answer, compare it with the full answer query and answer key below.
 
@@ -1141,7 +1177,7 @@ DeviceFileEvents
 | project Timestamp, ActionType, FileName, FolderPath, SHA256
 ```
 
-Why the columns changed: the first query teaches the simplest clue, the `.dmp` extension. The second query keeps the same table but adds `SHA256` because the final answer needs a file identifier.
+Why the columns changed: the second query keeps the same table. It adds the folder pattern and keeps `SHA256` for follow-up evidence.
 
 KQL logic to learn: use `endswith` for extensions, and use folder patterns when the filename is random.
 
@@ -1164,7 +1200,6 @@ DeviceFileEvents
 
 - Dump file: `pid_976_2ztj_d6a.dmp`
 - File path clue: a temp path containing `pid_`
-- Hash: shown in `SHA256`
 
 ### How The KQL Finds It
 
@@ -1173,7 +1208,7 @@ This scenario teaches pattern hunting when filenames are random:
 1. `FileName endswith ".dmp"` finds dump files without knowing the full filename.
 2. `FolderPath has "pid_"` catches the AttackIQ-style dump path pattern.
 3. `project Timestamp, ActionType, FileName, FolderPath, SHA256` keeps the file evidence readable.
-4. `SHA256` gives you a stable identifier for the dump artifact.
+4. `SHA256` is included if students want a stable file identifier.
 
 Checkpoint: random names require pattern logic. Extensions and folders are clues too.
 
@@ -1242,6 +1277,8 @@ AlertEvidence
 
 Why the columns changed: `AlertEvidence` is where the prevention language lives. `Title` and `Severity` explain the outcome better than `FolderPath` does, and `SHA256` keeps the file identifier visible.
 
+The full answer uses this alert query because the challenge asks whether PwDump was prevented. The file query is just the warm-up that proves a PwDump artifact existed.
+
 KQL logic to learn: `Title` often tells you the outcome. Words like `prevented` or `blocked` change the story from execution to attempted execution.
 
 </details>
@@ -1308,7 +1345,7 @@ Why should the query search for both `gsecdump` and `Vigorf`?
 <details>
 <summary>Break Down The KQL</summary>
 
-The tool name and the detection name are not always the same. `FileName has "gsecdump"` finds the staged artifact, while `Title has_any ("Vigorf", "malware")` catches how Defender classified the threat.
+The tool name and the detection name are not always the same. `FileName has "gsecdump"` finds the staged artifact, while `Title has "Vigorf"` catches how Defender classified the threat.
 
 Why this matters: do not assume the alert title will repeat the tool name. Pair artifact terms with detection-family terms.
 
@@ -1324,7 +1361,7 @@ DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "gsecdump"
-| project Timestamp, FileName, FolderPath, ActionType
+| project Timestamp, FileName, FolderPath, ActionType, SHA256
 ```
 
 Then search alert evidence with both artifact and detection-family terms:
@@ -1338,9 +1375,9 @@ AlertEvidence
 | project Timestamp, Title, Severity, FileName, SHA256
 ```
 
-Why the columns changed: the file query uses `FolderPath` and `ActionType` to prove staging. The alert query uses `Title` because Defender may call the same threat by a malware-family name such as `Vigorf`, and it keeps `SHA256` for the final evidence.
+Why the columns changed: the file query proves staging. The alert query uses `Title` because Defender calls the threat `Vigorf`, and it keeps `SHA256` for the final evidence.
 
-KQL logic to learn: one table may show the attacker tool name while another table shows the security product's malware family name.
+KQL logic to learn: one table may show the attacker tool name while another table shows Defender's malware family name.
 
 </details>
 
@@ -1549,7 +1586,7 @@ DeviceFileEvents
 <summary>Full Answer And Explanation</summary>
 
 - Artifact: `mimikatz_dump_passwords_v2.ps1`
-- Hash: shown in `SHA256`
+- `SHA256` is included for follow-up evidence.
 - The hunt works because the script artifact exists even when the process name is not `mimikatz.exe`.
 
 ### How The KQL Finds It
@@ -1600,7 +1637,7 @@ Why this matters: finish a hunt by producing evidence another analyst can valida
 
 Mission: validate the classic Mimikatz artifact with a filename, alert verdict, and hash.
 
-Start with the obvious artifact:
+Start with the known filename:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1624,7 +1661,7 @@ AlertEvidence
 | project Timestamp, DeviceName, Title, Severity, FileName, SHA256
 ```
 
-Why the columns changed: the report answer needs Defender's verdict, so `Title` and `Severity` replace file-lifecycle columns.
+Why the columns changed: the report answer needs Defender's verdict, so the alert query keeps `Title`, `Severity`, `DeviceName`, `FileName`, and `SHA256`.
 
 KQL logic to learn: a good hunt answer includes the thing, the verdict, the hash, the time, and the device. That is what makes it repeatable.
 
