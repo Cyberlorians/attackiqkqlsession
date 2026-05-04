@@ -673,7 +673,10 @@ KQL logic to learn: build the hunt one line at a time. First find the right aler
 
 </details>
 
-## Full Answer Query
+<details>
+<summary>Full Answer And Explanation</summary>
+
+Step 2 is the full answer query. It is repeated here so you can check your work.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -685,9 +688,6 @@ AlertEvidence
 | project Timestamp, Title, FileName, AttackTechniques, SHA256
 | order by Timestamp asc
 ```
-
-<details>
-<summary>Full Answer And Explanation</summary>
 
 - Script: `credentials_in_registry.ps1`
 - Alert: `A malicious PowerShell Cmdlet was invoked on the machine`
