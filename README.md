@@ -503,18 +503,19 @@ DeviceProcessEvents
 | take 20
 ```
 
-Now shape the rows into a timeline. A timeline needs a time column, an evidence type, and a detail column:
+Now shape the rows into a timeline. A timeline needs a time column, an evidence type, an action, and a detail column:
 
 ```kusto
 let TargetDevice = "usm262346";
 DeviceProcessEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
-| project Timestamp, EvidenceType="Process", Detail=ProcessCommandLine
+| project Timestamp, EvidenceType="Process", Action=FileName,
+          Detail=ProcessCommandLine, Source=InitiatingProcessCommandLine
 | order by Timestamp asc
 ```
 
-Checkpoint: Which column tells you when it happened? Which column tells you what command ran?
+Checkpoint: Which column tells you when it happened? Which column tells you what process ran? Which column tells you the command line?
 
 </details>
 
@@ -718,16 +719,19 @@ DeviceProcessEvents
 | project Timestamp, FileName, ProcessCommandLine
 ```
 
-Now add the required behavior terms:
+Now keep the `cmd.exe` process filter and add the required behavior terms:
 
 ```kusto
 let TargetDevice = "usm262346";
 DeviceProcessEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
+| where FileName =~ "cmd.exe"
 | where ProcessCommandLine has_all ("reg save", "hklm\\sam")
-| project Timestamp, ProcessCommandLine, AccountName
+| project Timestamp, DeviceName, AccountName, FileName, ProcessCommandLine
 ```
+
+Notice what stayed the same: the second query keeps `FileName =~ "cmd.exe"` and keeps `FileName` in the output. The only new idea is `has_all`.
 
 KQL logic to learn: `has_all` is for "both of these clues must be present." That is different from `has_any`, where only one clue has to match.
 
@@ -818,17 +822,21 @@ DeviceProcessEvents
 | project Timestamp, FileName, ProcessCommandLine
 ```
 
-Then add the parent process columns:
+Now keep the same process-name filter, add the command-line clues, and include the parent process columns:
 
 ```kusto
 let TargetDevice = "usm262346";
 DeviceProcessEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
-| where FileName =~ "esentutl.exe"
+| where FileName in~ ("powershell.exe", "esentutl.exe")
+| where ProcessCommandLine has_any ("collect_database_webcache.ps1", "esentutl", "WebCache")
+   or InitiatingProcessCommandLine has "collect_database_webcache.ps1"
 | project Timestamp, FileName, ProcessCommandLine,
-          InitiatingProcessFileName, InitiatingProcessCommandLine
+          InitiatingProcessFileName, InitiatingProcessCommandLine, AccountName, SHA256
 ```
+
+Notice what stayed the same: the second query still keeps both process names from the first query. It only adds the WebCache clues and the parent-process columns.
 
 KQL logic to learn: `InitiatingProcessFileName` and `InitiatingProcessCommandLine` answer "who launched this?"
 
@@ -1020,10 +1028,10 @@ DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "kerberoast"
-| project Timestamp, FileName, FolderPath, ActionType
+| project Timestamp, FileName, FolderPath, ActionType, SHA256
 ```
 
-Then tighten the logic to the expected pair of files:
+Then keep those same evidence columns and summarize the expected pair of files:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1031,10 +1039,10 @@ DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")
-| project Timestamp, FileName, FolderPath, ActionType
+| summarize FirstSeen=min(Timestamp), LastSeen=max(Timestamp), Actions=make_set(ActionType) by FileName, FolderPath, SHA256
 ```
 
-Why the full answer looks different: the step queries show individual file events. The full answer uses `summarize` to roll those events into one row per artifact, so `ActionType` becomes the `Actions` set.
+Why the shape changed: `summarize` rolls several file-event rows into one row per artifact. `ActionType` becomes the `Actions` set, while `FileName`, `FolderPath`, and `SHA256` stay visible.
 
 KQL logic to learn: `has` is good for one clue. `has_any` is good when several related clue words can identify the same scenario.
 
@@ -1220,7 +1228,7 @@ DeviceFileEvents
 
 Why these columns: this first pass answers, "Did a PwDump-looking file appear on disk, and what file action happened?"
 
-Then search the alert wording:
+Then keep the alert wording and create a simple outcome column:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -1228,10 +1236,11 @@ AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName has "pwdump"
 | where FileName has "pwdump" or Title has "PWDump"
-| project Timestamp, Title, Severity, FileName
+| extend Outcome = iff(Title has "prevented", "Prevented", "Review")
+| project Timestamp, Outcome, Title, Severity, FileName, SHA256
 ```
 
-Why the columns changed: `AlertEvidence` is where the prevention language lives. `Title` and `Severity` explain the outcome better than `FolderPath` does.
+Why the columns changed: `AlertEvidence` is where the prevention language lives. `Title` and `Severity` explain the outcome better than `FolderPath` does, and `SHA256` keeps the file identifier visible.
 
 KQL logic to learn: `Title` often tells you the outcome. Words like `prevented` or `blocked` change the story from execution to attempted execution.
 
@@ -1326,10 +1335,10 @@ AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName has "gsecdump"
 | where FileName has "gsecdump" or Title has "Vigorf"
-| project Timestamp, Title, Severity, FileName
+| project Timestamp, Title, Severity, FileName, SHA256
 ```
 
-Why the columns changed: the file query uses `FolderPath` and `ActionType` to prove staging. The alert query uses `Title` because Defender may call the same threat by a malware-family name such as `Vigorf`.
+Why the columns changed: the file query uses `FolderPath` and `ActionType` to prove staging. The alert query uses `Title` because Defender may call the same threat by a malware-family name such as `Vigorf`, and it keeps `SHA256` for the final evidence.
 
 KQL logic to learn: one table may show the attacker tool name while another table shows the security product's malware family name.
 
@@ -1409,7 +1418,7 @@ DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "lazagne"
-| project Timestamp, FileName, ActionType, FolderPath
+| project Timestamp, FileName, ActionType, FolderPath, SHA256
 | order by Timestamp asc
 ```
 
@@ -1421,10 +1430,10 @@ DeviceFileEvents
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
 | where FileName has "lazagne"
-| summarize Actions=make_set(ActionType), FirstSeen=min(Timestamp), LastSeen=max(Timestamp) by FileName
+| summarize Actions=make_set(ActionType), FirstSeen=min(Timestamp), LastSeen=max(Timestamp), Paths=make_set(FolderPath) by FileName, SHA256
 ```
 
-KQL logic to learn: `summarize` turns many rows into one answer. `make_set(ActionType)` shows all actions seen for the file.
+KQL logic to learn: `summarize` turns many rows into one answer. `ActionType` becomes `Actions`, `FolderPath` becomes `Paths`, and `SHA256` stays in the output.
 
 </details>
 
@@ -1612,7 +1621,7 @@ AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
 | where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
-| project Timestamp, Title, Severity, FileName, SHA256
+| project Timestamp, DeviceName, Title, Severity, FileName, SHA256
 ```
 
 Why the columns changed: the report answer needs Defender's verdict, so `Title` and `Severity` replace file-lifecycle columns.
