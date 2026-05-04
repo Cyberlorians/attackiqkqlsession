@@ -57,6 +57,38 @@ let Start = datetime(2026-05-04T13:10:00Z);
 let End = datetime(2026-05-04T13:20:00Z);
 ```
 
+## KQL 101: How To Read These Queries
+
+KQL reads from top to bottom. Think of each line as one instruction in a recipe.
+
+```kusto
+DeviceProcessEvents
+| where TimeGenerated between (Start .. End)
+| where DeviceName == TargetDevice
+| where ProcessCommandLine has "reg save"
+| project TimeGenerated, DeviceName, FileName, ProcessCommandLine
+| order by TimeGenerated asc
+```
+
+How to read it:
+
+- `DeviceProcessEvents`: start with the process table.
+- `|`: pipe the rows into the next step.
+- `where`: keep only rows that match a condition.
+- `between (Start .. End)`: keep only rows inside the time window.
+- `==`: exact match.
+- `has`: word-based search for one clue.
+- `has_any`: match any clue in a list.
+- `has_all`: require every clue in a list.
+- `=~`: case-insensitive exact match, useful for known filenames.
+- `in~`: case-insensitive match against a list of exact values.
+- `endswith`: useful for extensions like `.dmp`.
+- `project`: choose the columns students need for the answer.
+- `summarize`: group rows into counts or rollups.
+- `order by`: sort results so the story is easier to read.
+
+Beginner habit: every answer should prove four things when possible: **when**, **where**, **what**, and **why it matters**.
+
 ## Run Context
 
 | Field | Value |
@@ -190,6 +222,18 @@ What launched the attack, what account ran it, and where did the AttackIQ runtim
 - Runtime path: `C:\Users\xadmin\Downloads\.ghostex-cli-wd-2170286878`
 - Main orchestrator: `python.exe` running `attack_graph.py`
 
+### How The KQL Finds It
+
+Read the warm-up query like this:
+
+1. `DeviceProcessEvents` looks for commands that ran.
+2. `DeviceFileEvents` looks for tools and scripts that appeared on disk.
+3. `AlertEvidence` looks for Defender's security interpretation.
+4. Each branch uses `project` to rename different columns into the same story columns: `TimeGenerated`, `EvidenceType`, `Action`, `Detail`, and `Source`.
+5. `order by TimeGenerated asc` turns all three evidence types into one timeline.
+
+Beginner checkpoint: when you see `union`, ask, "What tables are being combined, and did we make their output columns match?"
+
 </details>
 
 </details>
@@ -288,6 +332,16 @@ Which script is the registry-creds clue, and which ATT&CK technique did Defender
 - Alert: `A malicious PowerShell Cmdlet was invoked on the machine`
 - ATT&CK: `Credentials in Registry (T1552.002)`
 
+### How The KQL Finds It
+
+The answer comes from three beginner pivots:
+
+1. `DeviceFileEvents` plus `FileName =~ "credentials_in_registry.ps1"` proves the script artifact existed.
+2. `DeviceProcessEvents` plus `ProcessCommandLine has "credentials_in_registry.ps1"` checks whether PowerShell tried to run it.
+3. `AlertEvidence` plus `AttackTechniques has_any ("Credentials in Registry", "T1552.002")` explains why Defender cared.
+
+Beginner checkpoint: `FileName` tells you what the artifact was. `Title` and `AttackTechniques` tell you why it matters.
+
 </details>
 
 </details>
@@ -385,6 +439,18 @@ cmd.exe /c "reg save hklm\sam C:\Users\xadmin\AppData\Local\Temp\sam"
 
 Defender also produced a `RegistryExfil` prevention alert.
 
+### How The KQL Finds It
+
+The important beginner logic is the command-line filter:
+
+```kusto
+| where ProcessCommandLine has_all ("reg save", "hklm\\sam")
+```
+
+Read it as: keep only process rows where the command line contains both clues. `reg save` tells us the registry was being exported. `hklm\sam` tells us the SAM hive was the target.
+
+Then `project TimeGenerated, FileName, Detail=ProcessCommandLine` keeps the columns needed to answer: when it happened, which process ran, and the exact command.
+
 </details>
 
 </details>
@@ -470,6 +536,17 @@ Which process launched `esentutl.exe`, and what browser/cache path was targeted?
 - Script: `collect_database_webcache.ps1`
 - Child process: `esentutl.exe`
 - Target path includes `C:\Users\xadmin\AppData\Local\Microsoft\Windows\WebCache`
+
+### How The KQL Finds It
+
+This answer is about parent and child process thinking:
+
+1. `FileName in~ ("powershell.exe", "esentutl.exe")` keeps the two process names students care about.
+2. `ProcessCommandLine has_any (...)` finds direct command-line clues like `WebCache`.
+3. `InitiatingProcessCommandLine has "collect_database_webcache.ps1"` shows what launched the child process.
+4. `project ... InitiatingProcessFileName, InitiatingProcessCommandLine` keeps the parent process evidence visible.
+
+Beginner checkpoint: `FileName` is the process itself. `InitiatingProcessFileName` is the process that started it.
 
 </details>
 
@@ -560,6 +637,16 @@ What file name and hash identify the Rubeus attempt?
 - File: `Rubeus.exe`
 - Hash: `1e1fe8a1730bf8caabd867fd2f990b0e52aee0f9f8635578ff8b18c0950b616c`
 - ATT&CK: `Kerberoasting (T1558.003)`
+
+### How The KQL Finds It
+
+This scenario teaches that blocked tools may be easier to find in file and alert tables:
+
+1. `DeviceFileEvents` plus `FileName =~ "Rubeus.exe"` proves the tool was staged.
+2. `AlertEvidence` plus `AttackTechniques has_any ("Kerberoasting", "T1558.003")` proves the behavior category.
+3. `SHA256` gives a durable identifier for the exact file.
+
+Beginner checkpoint: if `DeviceProcessEvents` is quiet, do not stop. Check `DeviceFileEvents` and `AlertEvidence`.
 
 </details>
 
@@ -652,6 +739,20 @@ Which two PowerShell files were staged for the Kerberoasting test?
 - `invoke-kerberoast.ps1`
 - Defender generated detections tied to `invoke-kerberoast.ps1`.
 
+### How The KQL Finds It
+
+The query uses a list because there are two related script names:
+
+```kusto
+| where FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")
+```
+
+Read it as: keep rows where the filename has either of those terms. That is useful when a scenario uses a launcher script and a payload script.
+
+Then the `AlertEvidence` branch uses the same keyword family to connect the script to Defender's Kerberoasting context.
+
+Beginner checkpoint: `has_any` is for "any one of these clues is enough."
+
 </details>
 
 </details>
@@ -742,6 +843,17 @@ What dump file was created, and what ATT&CK sub-technique did the alert map to?
 - Dump file: `pid_976_2ztj_d6a.dmp`
 - Alert: `An active 'DumpLsass' hacktool in a command line was prevented from executing`
 - ATT&CK: `LSASS Memory (T1003.001)`
+
+### How The KQL Finds It
+
+This scenario teaches pattern hunting when filenames are random:
+
+1. `FileName endswith ".dmp"` finds dump files without knowing the full filename.
+2. `FolderPath has "pid_"` catches the AttackIQ-style dump path pattern.
+3. `Title has_any ("DumpLsass", "LSASS")` searches the Defender alert language.
+4. `AttackTechniques has_any ("LSASS Memory", "T1003.001")` ties the alert to the ATT&CK sub-technique.
+
+Beginner checkpoint: random names require pattern logic. Extensions, folders, titles, and ATT&CK fields are all clues.
 
 </details>
 
@@ -834,6 +946,18 @@ Was PwDump executed cleanly, or was it prevented? What tells you?
 - Defender alert: `'PWDump' hacktool was prevented`
 - It was prevented, but the attempt is still visible.
 
+### How The KQL Finds It
+
+The answer comes from comparing file evidence with alert evidence:
+
+1. `DeviceFileEvents | where FileName has "pwdump"` finds the staged artifact.
+2. `AlertEvidence | where Title has "PWDump"` finds Defender's verdict.
+3. `project TimeGenerated, EvidenceType, FileName, Detail` keeps the result readable.
+
+The word `prevented` in the alert title matters. It tells students this was an attempted credential dump, not clean execution.
+
+Beginner checkpoint: the security outcome is usually in `Title`, not just `FileName`.
+
 </details>
 
 </details>
@@ -923,6 +1047,16 @@ What did Defender call the threat, and what was the actual staged file name?
 
 - Staged file: `gsecdump-0.7-win32.zip`
 - Defender alert: `'Vigorf' malware was prevented`
+
+### How The KQL Finds It
+
+This is a naming lesson:
+
+1. `FileName has "gsecdump"` finds what AttackIQ staged.
+2. `Title has_any ("Vigorf", "malware")` finds what Defender called it.
+3. Seeing both in the same time window connects the artifact name to the detection name.
+
+Beginner checkpoint: do not expect the alert title to repeat your search term. Defender may use a malware family or detection family name.
 
 </details>
 
@@ -1016,6 +1150,17 @@ How do we know the tool was cleaned up after staging?
 - Evidence: the file was created and later deleted.
 - Lesson: cleanup does not erase telemetry.
 
+### How The KQL Finds It
+
+This scenario teaches file lifecycle:
+
+1. `FileName has "lazagne"` finds all file events for the tool.
+2. `project TimeGenerated, ActionType, FileName, FolderPath` keeps the lifecycle visible.
+3. `order by TimeGenerated asc` shows creation before deletion.
+4. Optional: `summarize Actions=make_set(ActionType) by FileName` rolls multiple rows into one answer.
+
+Beginner checkpoint: `ActionType` is the column that tells you whether the file was created, deleted, or changed.
+
 </details>
 
 </details>
@@ -1107,6 +1252,16 @@ What makes this hunt different from simply looking for `mimikatz.exe`?
 - Defender verdict: `Mimikatz credential theft tool`
 - The hunt works even when the executable name is not `mimikatz.exe`.
 
+### How The KQL Finds It
+
+This scenario teaches students not to hunt only process names:
+
+1. `FileName =~ "mimikatz_dump_passwords_v2.ps1"` catches the script artifact.
+2. `Title has "Mimikatz credential theft tool"` catches Defender's behavior verdict.
+3. `or FileName =~ ...` in the alert branch keeps the search connected to the artifact even when `DeviceName` is missing or sparse in alert evidence.
+
+Beginner checkpoint: a Mimikatz detection can come from a script, zip, command, memory behavior, or tool verdict. Do not rely only on `mimikatz.exe`.
+
 </details>
 
 </details>
@@ -1197,6 +1352,17 @@ Which Mimikatz artifact was blocked, and what hash identifies it in alert eviden
 - Artifact: `mimikatz-x64.zip`
 - Defender verdict: `Mimikatz credential theft tool`
 - Alert evidence hash: `29a3e90d067a848bac1d7301e22d6ac7b6979c89be10373b98a47845e94c45b8`
+
+### How The KQL Finds It
+
+This answer teaches report-ready evidence:
+
+1. `FileName =~ "mimikatz-x64.zip"` finds the known artifact exactly.
+2. `Title has "Mimikatz credential theft tool"` confirms Defender's verdict.
+3. `project ... SHA256` keeps the hash in the output so another analyst can verify the exact file.
+4. Time, device, filename, verdict, and hash together make a complete CTF answer.
+
+Beginner checkpoint: a filename starts the hunt. A hash helps finish it.
 
 </details>
 
