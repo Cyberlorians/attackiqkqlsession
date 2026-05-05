@@ -74,15 +74,15 @@ Why it works:
 
 ### What Happened
 
-The attacker tried to save the local SAM registry hive.
+AttackIQ tried to save the local SAM registry hive with `reg save`.
 
 ### Your Challenge
 
-Find where the command tried to save the SAM hive.
+Find the timestamp, device, account, process name, and exact command line that tried to save the SAM hive.
 
 ### KQL Skill & How To Hunt
 
-Use `DeviceProcessEvents` for command-line evidence. Use `has_all` when both clues must appear in the same command.
+Use `DeviceProcessEvents` for command-line evidence. Use `has_all` when the command must contain more than one clue.
 
 Starter:
 
@@ -93,7 +93,21 @@ DeviceProcessEvents
 | where DeviceName == TargetDevice
 ```
 
-### Run This Query
+Then search for both `reg save` and `hklm\\sam` in the same command line.
+
+<blockquote>
+
+<details>
+<summary>Hint</summary>
+
+Filter on `ProcessCommandLine`. This scenario needs `has_all` because both clues must be present.
+
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -105,10 +119,22 @@ DeviceProcessEvents
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
-- Command: `reg save hklm\sam C:\Users\xadmin\AppData\Local\Temp\sam`
+- Process: `cmd.exe`
+- Account: `xadmin`
+- Command: `cmd.exe /c "reg save hklm\sam C:\Users\xadmin\AppData\Local\Temp\sam"`
 - Output path: `C:\Users\xadmin\AppData\Local\Temp\sam`
+
+Why it works:
+
+- `reg save` proves a registry hive export attempt.
+- `hklm\\sam` proves the SAM hive was the target.
+- `ProcessCommandLine` contains the destination path.
+
+</details>
+
+</blockquote>
 
 </details>
 
@@ -121,11 +147,11 @@ PowerShell launched `esentutl.exe` to collect browser WebCache data.
 
 ### Your Challenge
 
-Find the PowerShell script, the child process, and the browser cache path.
+Find the timestamp, device, account, process name, exact command line, parent process name, and parent command line for the WebCache collection activity.
 
 ### KQL Skill & How To Hunt
 
-Use process rows and parent-process columns. `FileName` is the process that ran. `InitiatingProcessFileName` is the process that launched it.
+Use `DeviceProcessEvents` and compare process rows to parent process columns. `FileName` is the process that ran. `InitiatingProcessFileName` is what launched it.
 
 Starter:
 
@@ -136,7 +162,21 @@ DeviceProcessEvents
 | where DeviceName == TargetDevice
 ```
 
-### Run This Query
+Then look for `collect_database_webcache`, `WebCache`, and `esentutl`.
+
+<blockquote>
+
+<details>
+<summary>Hint</summary>
+
+Filter on both `ProcessCommandLine` and `InitiatingProcessCommandLine`. The child process is `esentutl.exe`, but the parent PowerShell command explains why it ran.
+
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -150,12 +190,22 @@ DeviceProcessEvents
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
 - Script: `collect_database_webcache.ps1`
 - Child process: `esentutl.exe`
 - Parent process: `powershell.exe`
 - Target path includes `C:\Users\xadmin\AppData\Local\Microsoft\Windows\WebCache`
+
+Why it works:
+
+- `FileName in~ (...)` keeps both the PowerShell and `esentutl.exe` rows.
+- `InitiatingProcessCommandLine` connects `esentutl.exe` back to the PowerShell script.
+- `ProcessCommandLine` shows the WebCache path.
+
+</details>
+
+</blockquote>
 
 </details>
 
@@ -164,15 +214,15 @@ DeviceProcessEvents
 
 ### What Happened
 
-The attacker staged Rubeus for Kerberoasting.
+AttackIQ staged Rubeus for a Kerberoasting test.
 
 ### Your Challenge
 
-Find the staged Rubeus file and its hash.
+Find the timestamp, device, file action, file name, folder path, and SHA256 for the staged Rubeus file.
 
 ### KQL Skill & How To Hunt
 
-Use `DeviceFileEvents` when the evidence is a file created or staged on disk.
+Use `DeviceFileEvents` when the evidence is a file created or deleted on disk.
 
 Starter:
 
@@ -183,7 +233,21 @@ DeviceFileEvents
 | where DeviceName == TargetDevice
 ```
 
-### Run This Query
+Then filter the file name for `rubeus`.
+
+<blockquote>
+
+<details>
+<summary>Hint</summary>
+
+Filter on `FileName`. Keep `ActionType`, `FolderPath`, and `SHA256` in your `project` so the file evidence is report-ready.
+
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -195,10 +259,21 @@ DeviceFileEvents
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
 - File: `Rubeus.exe`
+- Action: `FileCreated`, followed by cleanup with `FileDeleted`
 - SHA256: `1e1fe8a1730bf8caabd867fd2f990b0e52aee0f9f8635578ff8b18c0950b616c`
+
+Why it works:
+
+- `DeviceFileEvents` shows staged files even when execution is blocked or short-lived.
+- `ActionType` shows the file lifecycle.
+- `SHA256` identifies the exact Rubeus artifact.
+
+</details>
+
+</blockquote>
 
 </details>
 
@@ -207,15 +282,15 @@ DeviceFileEvents
 
 ### What Happened
 
-The attacker staged PowerShell Kerberoasting files.
+AttackIQ staged PowerShell Kerberoasting files.
 
 ### Your Challenge
 
-Find the Kerberoast PowerShell files staged on disk.
+Find the timestamp, device, file action, file name, and folder path for the Kerberoast PowerShell files.
 
 ### KQL Skill & How To Hunt
 
-Use `DeviceFileEvents` and search for a broad filename clue first.
+Use `DeviceFileEvents` and start with a broad file-name clue. This scenario has more than one related script.
 
 Starter:
 
@@ -226,7 +301,21 @@ DeviceFileEvents
 | where DeviceName == TargetDevice
 ```
 
-### Run This Query
+Then filter the file name for `kerberoast`.
+
+<blockquote>
+
+<details>
+<summary>Hint</summary>
+
+Filter on `FileName`. The broad clue `kerberoast` should reveal both the wrapper script and the main script. `Project` the file action and path so you can prove they were staged.
+
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -234,14 +323,25 @@ DeviceFileEvents
 | where Timestamp > ago(14d)
 | where DeviceName == TargetDevice
 | where FileName has "kerberoast"
-| project Timestamp, DeviceName, ActionType, FileName, FolderPath, SHA256
+| project Timestamp, DeviceName, ActionType, FileName, FolderPath
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
 - `call-invoke-kerberoast.ps1`
 - `invoke-kerberoast.ps1`
+- Both were created under an AttackIQ temp folder.
+
+Why it works:
+
+- `FileName has "kerberoast"` catches both related PowerShell files.
+- `ActionType` confirms the files were staged.
+- `FolderPath` shows where AttackIQ placed them.
+
+</details>
+
+</blockquote>
 
 </details>
 
@@ -250,15 +350,15 @@ DeviceFileEvents
 
 ### What Happened
 
-The attacker tried to dump LSASS memory.
+AttackIQ tried to dump LSASS memory to a minidump file.
 
 ### Your Challenge
 
-Find the dump file and where it landed.
+Find the timestamp, device, file action, dump file name, and folder path for the LSASS dump.
 
 ### KQL Skill & How To Hunt
 
-Use `DeviceFileEvents` and hunt file patterns. Dump files often end with `.dmp`.
+Use `DeviceFileEvents` and hunt file patterns. Dump files often end in `.dmp`, and AttackIQ dump names may include `pid_`.
 
 Starter:
 
@@ -269,7 +369,21 @@ DeviceFileEvents
 | where DeviceName == TargetDevice
 ```
 
-### Run This Query
+Then search for `.dmp` or `pid_`.
+
+<blockquote>
+
+<details>
+<summary>Hint</summary>
+
+Do not guess the full dump filename. Filter with `FileName endswith ".dmp"` or `FolderPath has "pid_"`.
+
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -277,14 +391,25 @@ DeviceFileEvents
 | where Timestamp > ago(14d)
 | where DeviceName == TargetDevice
 | where FileName endswith ".dmp" or FolderPath has "pid_"
-| project Timestamp, DeviceName, ActionType, FileName, FolderPath, SHA256
+| project Timestamp, DeviceName, ActionType, FileName, FolderPath
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
 - Dump file: `pid_976_2ztj_d6a.dmp`
-- Path clue: folder path contains `pid_`
+- Action: `FileCreated`
+- Folder path: `C:\Users\xadmin\AppData\Local\Temp\pid_976_2ztj_d6a.dmp`
+
+Why it works:
+
+- `.dmp` finds dump files without knowing the exact random name.
+- `pid_` catches the AttackIQ naming pattern.
+- `FolderPath` shows where the dump landed.
+
+</details>
+
+</blockquote>
 
 </details>
 
@@ -293,15 +418,15 @@ DeviceFileEvents
 
 ### What Happened
 
-The attacker staged PwDump7, and Defender prevented the hacktool.
+AttackIQ staged PwDump7, and Defender prevented the hacktool.
 
 ### Your Challenge
 
-Find Defender's PwDump verdict.
+Find the timestamp, device, alert title, severity, entity type, file name, and SHA256 for the PwDump evidence.
 
 ### KQL Skill & How To Hunt
 
-Use `AlertEvidence` when the question asks what Defender called or did with the activity.
+Use `AlertEvidence` when the question asks what Defender called or did with the activity. For alert evidence, get the alert IDs from the target device first, then show the related file and machine rows.
 
 Starter:
 
@@ -312,22 +437,53 @@ AlertEvidence
 | where DeviceName == TargetDevice
 ```
 
-### Run This Query
+Then filter the alert title for `PWDump`.
+
+<blockquote>
+
+<details>
+<summary>Hint</summary>
+
+Start from the machine alert where `Title has "PWDump"`, then use the matching `AlertId` to reveal the file row with `pwdump7.zip`.
+
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
+let TargetAlerts =
+    AlertEvidence
+    | where Timestamp > ago(14d)
+    | where DeviceName == TargetDevice
+    | where Title has "PWDump"
+    | distinct AlertId;
 AlertEvidence
 | where Timestamp > ago(14d)
-| where DeviceName == TargetDevice
-| where Title has "PWDump" or FileName has "pwdump"
-| project Timestamp, DeviceName, Title, Severity, EntityType, FileName, SHA256
+| where AlertId in (TargetAlerts)
+| where EntityType in ("Machine", "File")
+| project Timestamp, DeviceName=iff(isempty(DeviceName), TargetDevice, DeviceName), Title, Severity, EntityType, FileName, SHA256
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
 - Artifact: `pwdump7.zip`
 - Defender verdict: `'PWDump' hacktool was prevented`
+- SHA256: `ee29e80a2e8c469655fe215eac14c2fbb201116e40fd056dcd1f602e1959263b`
+
+Why it works:
+
+- The machine row scopes the alert to `usm262346`.
+- The related file row gives the artifact name and hash.
+- `Title` gives Defender's prevention verdict.
+
+</details>
+
+</blockquote>
 
 </details>
 
@@ -336,15 +492,15 @@ AlertEvidence
 
 ### What Happened
 
-The attacker staged `gsecdump`, but Defender used a different detection name.
+AttackIQ staged `gsecdump`, but Defender used the detection name `Vigorf`.
 
 ### Your Challenge
 
-Find Defender's verdict and the staged file.
+Find the timestamp, device, alert title, severity, entity type, file name, and SHA256 for the gsecdump/Vigorf evidence.
 
 ### KQL Skill & How To Hunt
 
-Use `AlertEvidence` and search both the tool name and Defender's detection name.
+Use `AlertEvidence` and search for Defender's detection name. Tool names and alert titles do not always match.
 
 Starter:
 
@@ -355,22 +511,53 @@ AlertEvidence
 | where DeviceName == TargetDevice
 ```
 
-### Run This Query
+Then filter the alert title for `Vigorf`.
+
+<blockquote>
+
+<details>
+<summary>Hint</summary>
+
+Start from `Title has "Vigorf"`, then use the matching `AlertId` to reveal the actual staged filename.
+
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
+let TargetAlerts =
+    AlertEvidence
+    | where Timestamp > ago(14d)
+    | where DeviceName == TargetDevice
+    | where Title has "Vigorf"
+    | distinct AlertId;
 AlertEvidence
 | where Timestamp > ago(14d)
-| where DeviceName == TargetDevice
-| where Title has "Vigorf" or FileName has "gsecdump"
-| project Timestamp, DeviceName, Title, Severity, EntityType, FileName, SHA256
+| where AlertId in (TargetAlerts)
+| where EntityType in ("Machine", "File")
+| project Timestamp, DeviceName=iff(isempty(DeviceName), TargetDevice, DeviceName), Title, Severity, EntityType, FileName, SHA256
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
 - Staged file: `gsecdump-0.7-win32.zip`
 - Defender verdict: `'Vigorf' malware was prevented`
+- SHA256: `e5b9080d2c9c5b6190567acb7224ed84b48fad50d2a0c666c97a8c8c6b2099f8`
+
+Why it works:
+
+- `Vigorf` is Defender's detection name.
+- The related file row shows the actual tool name.
+- The hash identifies the staged zip file.
+
+</details>
+
+</blockquote>
 
 </details>
 
@@ -379,11 +566,11 @@ AlertEvidence
 
 ### What Happened
 
-The attacker staged LaZagne, then cleanup removed it.
+AttackIQ staged LaZagne, then cleanup removed it.
 
 ### Your Challenge
 
-Find evidence that LaZagne was created and later deleted.
+Find the timestamp, device, file action, file name, folder path, and SHA256 for the LaZagne file lifecycle.
 
 ### KQL Skill & How To Hunt
 
@@ -398,7 +585,21 @@ DeviceFileEvents
 | where DeviceName == TargetDevice
 ```
 
-### Run This Query
+Then filter the file name for `lazagne`.
+
+<blockquote>
+
+<details>
+<summary>Hint</summary>
+
+Look for more than one row. `FileCreated` and `FileDeleted` together tell the cleanup story.
+
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -410,10 +611,21 @@ DeviceFileEvents
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
 - Artifact: `laZagne_windows_x64.exe`
-- Evidence: `ActionType` shows it was created and later deleted.
+- Actions: `FileCreated`, then `FileDeleted`
+- SHA256 on creation: `5f26175299518e9c5541db9c17ce5981c2c5dcfc7ad2347716f4776e67af8ff3`
+
+Why it works:
+
+- `ActionType` shows the lifecycle.
+- `FileName has "lazagne"` catches the staged tool.
+- Cleanup does not remove the telemetry.
+
+</details>
+
+</blockquote>
 
 </details>
 
@@ -422,40 +634,72 @@ DeviceFileEvents
 
 ### What Happened
 
-The attacker used a Mimikatz-style PowerShell script instead of a simple `mimikatz.exe` process.
+AttackIQ staged a Mimikatz-style PowerShell script instead of a simple `mimikatz.exe` process.
 
 ### Your Challenge
 
-Find the script artifact.
+Find the timestamp, device, alert title, severity, entity type, file name, and SHA256 for the Mimikatz-style script artifact.
 
 ### KQL Skill & How To Hunt
 
-Use `DeviceFileEvents` when the tool appears as a script or staged file instead of a process name.
+Use `AlertEvidence` when Defender has a verdict and hash for a staged script. Scope to the target device first, then pull back the related file evidence.
 
 Starter:
 
 ```kusto
 let TargetDevice = "usm262346";
-DeviceFileEvents
+AlertEvidence
 | where Timestamp > ago(14d)
 | where DeviceName == TargetDevice
 ```
 
-### Run This Query
+Then filter for Defender's Mimikatz alert and the exact script filename.
+
+<blockquote>
+
+<details>
+<summary>Hint</summary>
+
+Do not search only for `mimikatz.exe`. Use `AlertId` to connect the target-device alert to the script file row with the hash.
+
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
-DeviceFileEvents
+let TargetAlerts =
+    AlertEvidence
+    | where Timestamp > ago(14d)
+    | where DeviceName == TargetDevice
+    | where Title has "Mimikatz credential theft tool"
+    | distinct AlertId;
+AlertEvidence
 | where Timestamp > ago(14d)
-| where DeviceName == TargetDevice
-| where FileName has "mimikatz"
-| project Timestamp, DeviceName, ActionType, FileName, FolderPath, SHA256
+| where AlertId in (TargetAlerts)
+| where FileName =~ "mimikatz_dump_passwords_v2.ps1"
+| project Timestamp, DeviceName=iff(isempty(DeviceName), TargetDevice, DeviceName), Title, Severity, EntityType, FileName, SHA256
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
 - Script artifact: `mimikatz_dump_passwords_v2.ps1`
+- Defender verdict: `Mimikatz credential theft tool`
+- SHA256: `0984af597a9f4b6fb311ec64cf5d853c7390e0d375a43f1ce0e28bf3a81b0856`
+
+Why it works:
+
+- The target-device alert scopes the hunt to `usm262346`.
+- `FileName =~ "mimikatz_dump_passwords_v2.ps1"` keeps the answer focused on the script.
+- `SHA256` gives the durable indicator for the script.
+
+</details>
+
+</blockquote>
 
 </details>
 
@@ -464,15 +708,15 @@ DeviceFileEvents
 
 ### What Happened
 
-The attacker staged the classic Mimikatz package.
+AttackIQ staged the classic Mimikatz package, and Defender identified it as a credential theft tool.
 
 ### Your Challenge
 
-Find the Mimikatz artifact, Defender verdict, and hash.
+Find the timestamp, device, alert title, severity, entity type, file name, and SHA256 for the original Mimikatz package evidence.
 
 ### KQL Skill & How To Hunt
 
-Use `AlertEvidence` when the answer needs Defender's verdict and hash.
+Use `AlertEvidence` when the answer needs Defender's verdict and the file hash. Scope to the target device, then pull back the related file evidence.
 
 Starter:
 
@@ -483,22 +727,53 @@ AlertEvidence
 | where DeviceName == TargetDevice
 ```
 
-### Run This Query
+Then intersect the target-device Mimikatz alert with the exact package filename.
+
+<blockquote>
+
+<details>
+<summary>Hint</summary>
+
+The exact file is `mimikatz-x64.zip`. Use `AlertId` to connect the target-device alert to the file evidence row with the hash.
+
+</details>
+
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
+let TargetAlerts =
+    AlertEvidence
+    | where Timestamp > ago(14d)
+    | where DeviceName == TargetDevice
+    | where Title has "Mimikatz credential theft tool"
+    | distinct AlertId;
 AlertEvidence
 | where Timestamp > ago(14d)
-| where DeviceName == TargetDevice
-| where FileName has "mimikatz" or Title has "Mimikatz credential theft tool"
-| project Timestamp, DeviceName, Title, Severity, EntityType, FileName, SHA256
+| where AlertId in (TargetAlerts)
+| where FileName =~ "mimikatz-x64.zip"
+| project Timestamp, DeviceName=iff(isempty(DeviceName), TargetDevice, DeviceName), Title, Severity, EntityType, FileName, SHA256
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
 - Artifact: `mimikatz-x64.zip`
 - Defender verdict: `Mimikatz credential theft tool`
+- Severity: `High`
 - SHA256: `29a3e90d067a848bac1d7301e22d6ac7b6979c89be10373b98a47845e94c45b8`
+
+Why it works:
+
+- `Title` confirms Defender's verdict.
+- `FileName =~ "mimikatz-x64.zip"` keeps this focused on the original package.
+- `SHA256` gives the durable indicator for the package.
+
+</details>
+
+</blockquote>
 
 </details>
