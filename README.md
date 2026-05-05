@@ -1,6 +1,6 @@
 # AttackIQ Defender XDR KQL CTF Scenarios
 
-<details open>
+<details>
 <summary><strong>Scenario 01 - Credentials In Registry Script</strong></summary>
 
 ### What Happened
@@ -25,6 +25,8 @@ DeviceProcessEvents
 ```
 
 Then search the command line for the scenario keyword: `credentials_in_registry`.
+
+<blockquote>
 
 <details>
 <summary>Hint</summary>
@@ -62,6 +64,8 @@ Why it works:
 - `InitiatingProcessFileName` and `InitiatingProcessCommandLine` show the AttackIQ parent process.
 
 </details>
+
+</blockquote>
 
 </details>
 
