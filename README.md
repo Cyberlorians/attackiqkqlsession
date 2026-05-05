@@ -628,8 +628,6 @@ The attacker tries to abuse the registry as a place where credential material ca
 
 What is the exact PowerShell script filename, and which ATT&CK technique did Defender attach to it?
 
-Use the step-by-step queries first. Then open **Full Answer And Explanation** to check your work.
-
 ## KQL Skill
 
 Use `AlertEvidence` to connect the script filename to Defender's ATT&CK mapping.
@@ -648,26 +646,18 @@ AlertEvidence
 Before writing the rest of the query, use the same simple hunt flow:
 
 - Start with the scoped workstation query above.
-- Find the alert rows before typing the exact script name.
-- Use `FileName` to identify the script and `AttackTechniques` to identify the mapping.
+- Add only the columns needed to answer the question.
+- Let the results show the script name and ATT&CK mapping.
 
 <details>
-<summary>Break Down The KQL</summary>
+<summary>Build The Hunt Step By Step</summary>
 
-Stay in `AlertEvidence` for this scenario. The challenge asks what Defender attached to the script, so start in the table that records alert evidence.
+Goal: answer two questions from the same alert evidence rows:
 
-Hints and guidelines:
+- What script file did Defender alert on?
+- What ATT&CK technique did Defender map it to?
 
-- Do not type the exact script name yet.
-- `Title` tells you what Defender called the alert.
-- `FileName` tells you what script or file was involved.
-- `AttackTechniques` tells you the ATT&CK mapping.
-
-### Build The Hunt Step By Step
-
-Mission: find the PowerShell script and the ATT&CK technique from the same alert-evidence rows.
-
-Step 1: start with the scoped workstation query, then add the columns you need to answer the challenge.
+Step 1: add the columns that answer the question.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -678,13 +668,13 @@ AlertEvidence
 | order by Timestamp asc
 ```
 
-Look at these columns in the results:
+Read the results this way:
 
 - `Title`: what Defender called the alert
-- `FileName`: the script or file involved
-- `AttackTechniques`: the ATT&CK technique Defender mapped
+- `FileName`: the script or file Defender attached to the alert
+- `AttackTechniques`: the ATT&CK mapping
 
-Step 2: keep the same query and add a broad clue filter for PowerShell, registry, or credential wording.
+Step 2: add one broad clue line to reduce the noise.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -696,46 +686,35 @@ AlertEvidence
 | order by Timestamp asc
 ```
 
-Now answer the challenge from the result columns:
+Do not type the exact script name yet. Let the results show it.
+
+Use the output to answer:
 
 - What exact script name appears in `FileName`?
 - What technique appears in `AttackTechniques`?
 
-What changed in step 2: only one broad clue line was added. The table, device scope, output columns, and sort stayed the same.
-
-KQL logic to learn: build the hunt one line at a time. First scope to the workstation, then inspect the useful columns, then add a broad clue filter. The exact filename belongs in the final answer after you discover it.
+Checkpoint: if you can explain `Title`, `FileName`, and `AttackTechniques`, you have the answer.
 
 </details>
 
 <details>
-<summary>Full Answer And Explanation</summary>
-
-After the breakdown reveals the script name, the final query tightens to that exact filename.
-
-```kusto
-let TargetDevice = "usm262346";
-AlertEvidence
-| where Timestamp > ago(14d)
-| where DeviceName == TargetDevice
-| where FileName =~ "credentials_in_registry.ps1"
-| where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
-| project Timestamp, Title, FileName, AttackTechniques, SHA256
-| order by Timestamp asc
-```
+<summary>Answer</summary>
 
 - Script: `credentials_in_registry.ps1`
 - Alert: `A malicious PowerShell Cmdlet was invoked on the machine`
 - ATT&CK: `Credentials in Registry (T1552.002)`
 
-### How The KQL Finds It
+Why this is the answer:
 
-The answer comes from a focused alert-evidence query:
+- `FileName` gives the exact script.
+- `Title` gives Defender's alert wording.
+- `AttackTechniques` gives the ATT&CK mapping.
 
-1. `FileName =~ "credentials_in_registry.ps1"` keeps the known script artifact connected to the alert.
-2. `Title has_any (...)` catches Defender's PowerShell and credential wording.
-3. `AttackTechniques has_any ("Credentials in Registry", "T1552.002")` explains why Defender cared.
+After you know the script name, you can tighten the hunt with:
 
-Checkpoint: `FileName` tells you what the artifact was. `Title` and `AttackTechniques` tell you why it matters.
+```kusto
+| where FileName =~ "credentials_in_registry.ps1"
+```
 
 </details>
 
