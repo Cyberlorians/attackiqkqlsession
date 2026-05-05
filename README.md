@@ -290,7 +290,8 @@ union isfuzzy=true
 (
     AlertEvidence
     | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice or FileName has_any ("pwdump", "gsecdump", "lazagne")
+    | where DeviceName == TargetDevice
+    | where FileName has_any ("pwdump", "gsecdump", "lazagne")
     | project Timestamp, EvidenceType="Alert", Detail=strcat(Title, " | ", FileName)
 )
 | order by Timestamp asc
@@ -481,10 +482,16 @@ Use the step-by-step queries first. Then open **Full Answer And Explanation** to
 
 ## How To Think About The Query
 
-Why does this warm-up use `union isfuzzy=true` instead of querying only one table?
+Before writing the query, ask:
+
+- Which one workstation should I scope to first?
+- Which evidence types might each hold a different part of the story: process, file, or alert?
+- What common columns do I need so separate tables read like one timeline?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 Endpoint investigations usually need more than one evidence type. `DeviceProcessEvents` shows execution, `DeviceFileEvents` shows staged or deleted files, and `AlertEvidence` shows Defender verdicts. `union isfuzzy=true` lets you combine those tables even when the projected columns are not identical across every source.
 
@@ -539,7 +546,7 @@ let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
 | where DeviceName == TargetDevice
-    or FileName has_any ("mimikatz", "lazagne", "gsecdump", "pwdump", "rubeus", "kerberoast", "credentials_in_registry")
+| where FileName has_any ("mimikatz", "lazagne", "gsecdump", "pwdump", "rubeus", "kerberoast", "credentials_in_registry")
 | project Timestamp, EvidenceType="Alert", Action=Title,
           Detail=strcat(EntityType, " | ", FileName, " | ", ProcessCommandLine), Source=ServiceSource
 | order by Timestamp asc
@@ -579,7 +586,7 @@ union isfuzzy=true
     AlertEvidence
     | where Timestamp > ago(7d)
     | where DeviceName == TargetDevice
-       or FileName has_any ("mimikatz", "lazagne", "gsecdump", "pwdump", "rubeus", "kerberoast", "credentials_in_registry")
+    | where FileName has_any ("mimikatz", "lazagne", "gsecdump", "pwdump", "rubeus", "kerberoast", "credentials_in_registry")
     | project Timestamp, EvidenceType="Alert", Action=Title,
               Detail=strcat(EntityType, " | ", FileName, " | ", ProcessCommandLine), Source=ServiceSource
 )
@@ -629,10 +636,16 @@ Use `AlertEvidence` to connect the script filename to Defender's ATT&CK mapping.
 
 ## How To Think About The Query
 
-How can one alert-evidence query show the script filename and the ATT&CK technique together?
+Before looking for the filename, ask:
+
+- Which table records Defender's explanation of an alert?
+- Which columns might show the artifact name and the ATT&CK technique?
+- How can I start broad enough to discover the script before I filter to it?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 Stay in `AlertEvidence` for this scenario. The challenge asks for Defender's ATT&CK mapping, and that mapping lives in the alert evidence row.
 
@@ -730,10 +743,16 @@ Use `has_all` when multiple terms must appear together in the same command line.
 
 ## How To Think About The Query
 
-Why is `has_all ("reg save", "hklm\\sam")` stronger than only searching for `reg` or `sam`?
+Before hunting the output path, ask:
+
+- Which endpoint table has process command lines?
+- What command-line words must appear together to prove a registry hive export?
+- Which columns will show the process, account, and exact command?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 `reg` by itself is too broad, and `sam` by itself can appear in unrelated paths or names. `has_all` requires both clues to exist in the same command line, which makes the result much closer to the real behavior: saving the SAM registry hive.
 
@@ -834,10 +853,16 @@ Follow parent and child process relationships with `InitiatingProcessCommandLine
 
 ## How To Think About The Query
 
-How does KQL show that `esentutl.exe` was part of the PowerShell browser-data collection chain?
+Before choosing a final filter, ask:
+
+- Which row shows the utility that ran?
+- Which parent-process columns show who launched it?
+- Which command-line clues prove this is browser/WebCache collection instead of normal Windows utility usage?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 Query both `FileName` and `InitiatingProcessCommandLine`. `FileName in~ ("powershell.exe", "esentutl.exe")` catches the parent and child process names, while `InitiatingProcessCommandLine has "collect_database_webcache.ps1"` ties the child process back to the script that launched it.
 
@@ -938,10 +963,16 @@ A blocked tool may not produce a clean process execution row. Hunt file staging 
 
 ## How To Think About The Query
 
-If Defender blocks a tool before normal execution telemetry appears, which tables should you query first?
+Before assuming there is no event, ask:
+
+- If Defender blocked a tool, would process execution, file staging, or alert evidence be strongest?
+- Which table can prove the file appeared?
+- Which table can explain how Defender classified it?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 Start with `DeviceFileEvents` and `AlertEvidence`. `DeviceFileEvents` can show that `Rubeus.exe` was staged on disk. `AlertEvidence` can show the Defender verdict and ATT&CK mapping even if there is no clean `DeviceProcessEvents` execution row.
 
@@ -971,7 +1002,7 @@ Then ask Defender what it thought the file meant:
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
-| where DeviceName == TargetDevice or FileName =~ "Rubeus.exe"
+| where DeviceName == TargetDevice
 | where FileName =~ "Rubeus.exe" or AttackTechniques has_any ("Kerberoasting", "T1558.003")
 | project Timestamp, EvidenceType="Alert", FileName,
           Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
@@ -1001,7 +1032,7 @@ union isfuzzy=true
 (
     AlertEvidence
     | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice or FileName =~ "Rubeus.exe"
+    | where DeviceName == TargetDevice
     | where FileName =~ "Rubeus.exe" or AttackTechniques has_any ("Kerberoasting", "T1558.003")
     | project Timestamp, EvidenceType="Alert", FileName, Detail=strcat(Title, " | ", AttackTechniques), AccountName, SHA256
 )
@@ -1048,10 +1079,16 @@ Use `has_any` to find both Kerberoast script files, then summarize their file ev
 
 ## How To Think About The Query
 
-Why does this query use `FileName has_any ("invoke-kerberoast", "call-invoke-kerberoast")` instead of an exact filename match?
+Before exact filenames, ask:
+
+- Is this technique likely to stage one file or a pair of related scripts?
+- Which broad keyword finds the family of artifacts first?
+- When should I summarize file events instead of reading every row one by one?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 This scenario stages more than one related PowerShell file. `has_any` lets the query catch both the wrapper script and the main Kerberoast script without writing separate filters for each filename.
 
@@ -1148,10 +1185,16 @@ Dump files are investigation gold. Hunt for `.dmp`, then broaden to folder patte
 
 ## How To Think About The Query
 
-How can you find LSASS dump behavior even if the dump filename is random?
+Before trying to guess the dump name, ask:
+
+- What file extension or folder pattern would a memory dump leave?
+- Which table records file creation and deletion?
+- Which columns show the file name, path, action, and hash?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 Look for file patterns instead of relying on one exact filename. `FileName endswith ".dmp"` catches obvious dump files, while `FolderPath has "pid_"` catches the AttackIQ-style path pattern.
 
@@ -1244,10 +1287,16 @@ Use `AlertEvidence` to read the prevention verdict, then shape that verdict with
 
 ## How To Think About The Query
 
-What KQL evidence tells you the PwDump scenario was attempted but prevented?
+Before deciding it executed, ask:
+
+- What file evidence shows the tool was staged?
+- What alert wording shows whether Defender blocked it?
+- Which column can turn that wording into a simple outcome?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 Use `AlertEvidence` when the important question is outcome. `Title has "PWDump"` finds Defender's prevention verdict, and `extend` can turn that wording into a simple `Outcome` column.
 
@@ -1276,7 +1325,7 @@ Then keep the alert wording and create a simple outcome column:
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
-| where DeviceName == TargetDevice or FileName has "pwdump"
+| where DeviceName == TargetDevice
 | where FileName has "pwdump" or Title has "PWDump"
 | extend Outcome = iff(Title has "prevented", "Prevented", "Review")
 | project Timestamp, Outcome, Title, Severity, FileName, SHA256
@@ -1299,7 +1348,7 @@ The final query is repeated here so you can check your work.
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
-| where DeviceName == TargetDevice or FileName has "pwdump"
+| where DeviceName == TargetDevice
 | where Title has "PWDump" or FileName has "pwdump"
 | extend Outcome = iff(Title has "prevented", "Prevented", "Review")
 | project Timestamp, Outcome, Title, Severity, FileName, SHA256
@@ -1348,10 +1397,16 @@ Tool names and detection names do not always match. Hunt both the staged file na
 
 ## How To Think About The Query
 
-Why should the query search for both `gsecdump` and `Vigorf`?
+Before relying on the tool name, ask:
+
+- What if Defender uses a malware-family name instead of the tool name?
+- Which evidence shows the staged artifact?
+- Which evidence shows Defender's verdict?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 The tool name and the detection name are not always the same. `FileName has "gsecdump"` finds the staged artifact, while `Title has "Vigorf"` catches how Defender classified the threat.
 
@@ -1378,7 +1433,7 @@ Then search alert evidence with both artifact and detection-family terms:
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
-| where DeviceName == TargetDevice or FileName has "gsecdump"
+| where DeviceName == TargetDevice
 | where FileName has "gsecdump" or Title has "Vigorf"
 | project Timestamp, Title, Severity, FileName, SHA256
 ```
@@ -1398,7 +1453,7 @@ The final query is repeated here so you can check your work.
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
-| where DeviceName == TargetDevice or FileName has "gsecdump"
+| where DeviceName == TargetDevice
 | where FileName has "gsecdump" or Title has "Vigorf"
 | project Timestamp, Title, Severity, FileName, SHA256
 | order by Timestamp asc
@@ -1443,10 +1498,16 @@ Use file events to catch both `FileCreated` and `FileDeleted` for the same suspi
 
 ## How To Think About The Query
 
-How can KQL show that LaZagne was staged and then cleaned up?
+Before answering cleanup, ask:
+
+- Which file-action column shows creation and deletion?
+- Do I need individual timeline rows first or a summarized lifecycle?
+- Which grouping keeps the file name, path, and hash visible?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 Query `DeviceFileEvents` for `FileName has "lazagne"`, then keep `ActionType` in the projected output. Seeing both creation and deletion actions for the same artifact shows the tool lifecycle.
 
@@ -1539,10 +1600,16 @@ When names are hidden or changed, hunt for script artifacts first. Do not depend
 
 ## How To Think About The Query
 
-What makes the obfuscated Mimikatz query a better lesson than simply searching for `mimikatz.exe`?
+Before searching for `mimikatz.exe`, ask:
+
+- What if the activity was wrapped in a script?
+- Which table shows staged artifacts even when the process name is not obvious?
+- How can I start broad, then tighten only after the artifact appears?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 The behavior is represented by a PowerShell script artifact, not a direct `mimikatz.exe` process. `FileName =~ "mimikatz_dump_passwords_v2.ps1"` catches the staged script exactly.
 
@@ -1635,10 +1702,16 @@ Use obvious file names when available, but validate with alert evidence and hash
 
 ## How To Think About The Query
 
-When the filename is obvious, why should you still project `SHA256` and alert details?
+Before stopping at the obvious filename, ask:
+
+- What extra evidence would make this report-ready?
+- Which alert fields show Defender's verdict and severity?
+- Which hash column identifies the exact file?
 
 <details>
 <summary>Break Down The KQL</summary>
+
+**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
 
 An obvious filename is a clue, not full proof. Projecting `SHA256`, `Title`, and `Severity` gives you a durable indicator and the Defender verdict that explains why the artifact matters.
 
@@ -1667,7 +1740,7 @@ Then collect the evidence you would put in a report:
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
-| where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
+| where DeviceName == TargetDevice
 | where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
 | project Timestamp, DeviceName, Title, Severity, FileName, SHA256
 ```
@@ -1687,7 +1760,7 @@ The final query is repeated here so you can check your work.
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(7d)
-| where DeviceName == TargetDevice or FileName =~ "mimikatz-x64.zip"
+| where DeviceName == TargetDevice
 | where FileName =~ "mimikatz-x64.zip" or Title has "Mimikatz credential theft tool"
 | project Timestamp, DeviceName, Title, Severity, FileName, SHA256
 | order by Timestamp asc
@@ -1735,7 +1808,8 @@ let FileEvidence =
 let AlertEvidenceRows =
     AlertEvidence
     | where Timestamp > ago(7d)
-    | where DeviceName == TargetDevice or FolderPath has_any ("AppData\\Local\\Temp\\aiq", ".ghostex-cli-wd")
+    | where DeviceName == TargetDevice
+    | where FolderPath has_any ("AppData\\Local\\Temp\\aiq", ".ghostex-cli-wd") or isnotempty(FileName) or isnotempty(Title)
     | project Timestamp, SourceTable="AlertEvidence", DeviceName=iff(isempty(DeviceName), TargetDevice, DeviceName), FileName, FolderPath, Detail=ProcessCommandLine, Title, AttackTechniques;
 union ProcessEvidence, FileEvidence, AlertEvidenceRows
 | extend EvidenceText = strcat(FileName, " ", FolderPath, " ", Detail, " ", Title, " ", AttackTechniques)
