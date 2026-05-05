@@ -91,6 +91,8 @@ Find the timestamp, device, account, process name, and exact command line that t
 
 Use `DeviceProcessEvents` for command-line evidence. Use `has_all` when the command must contain more than one clue.
 
+KQL move: use `has_all` when one clue is not enough and the same event must contain multiple terms, such as the command action and the target registry hive.
+
 Starter:
 
 ```kusto
@@ -107,7 +109,7 @@ Then search for both `reg save` and `hklm\\sam` in the same command line.
 <details>
 <summary>Hint</summary>
 
-Filter on `ProcessCommandLine`. This scenario needs `has_all` because both clues must be present.
+Filter on `ProcessCommandLine`. `has_all` keeps rows where both `reg save` and `hklm\\sam` appear in the same command, which is stronger than searching for either term alone.
 
 </details>
 
@@ -139,6 +141,11 @@ Why it works:
 - `hklm\\sam` proves the SAM hive was the target.
 - `ProcessCommandLine` contains the destination path.
 
+KQL takeaway:
+
+- Use `has_all` when multiple clues must exist in the same row.
+- Escape backslashes in strings, such as `hklm\\sam`, when matching Windows paths or registry paths.
+
 </details>
 
 </blockquote>
@@ -160,6 +167,8 @@ Find the timestamp, device, account, process name, exact command line, parent pr
 
 Use `DeviceProcessEvents` and compare process rows to parent process columns. `FileName` is the process that ran. `InitiatingProcessFileName` is what launched it.
 
+KQL move: use process lineage fields to connect the child process back to the parent command, then use `in~`, `has_any`, and `or` to keep both sides of the activity visible.
+
 Starter:
 
 ```kusto
@@ -176,7 +185,7 @@ Then look for `collect_database_webcache`, `WebCache`, and `esentutl`.
 <details>
 <summary>Hint</summary>
 
-Filter on both `ProcessCommandLine` and `InitiatingProcessCommandLine`. The child process is `esentutl.exe`, but the parent PowerShell command explains why it ran.
+Filter on both `ProcessCommandLine` and `InitiatingProcessCommandLine`. The child process is `esentutl.exe`, but the initiating PowerShell command explains why it ran.
 
 </details>
 
@@ -210,6 +219,11 @@ Why it works:
 - `InitiatingProcessCommandLine` connects `esentutl.exe` back to the PowerShell script.
 - `ProcessCommandLine` shows the WebCache path.
 
+KQL takeaway:
+
+- `FileName` is the process on the current row; `InitiatingProcessFileName` is its parent.
+- `has_any` is useful when several related words can describe the same activity.
+
 </details>
 
 </blockquote>
@@ -231,6 +245,8 @@ Find the timestamp, device, file action, file name, folder path, and SHA256 for 
 
 Use `DeviceFileEvents` when the evidence is a file created or deleted on disk.
 
+KQL move: switch tables when the evidence changes. File staging belongs in `DeviceFileEvents`, where `ActionType`, `FolderPath`, and `SHA256` describe the artifact.
+
 Starter:
 
 ```kusto
@@ -247,7 +263,7 @@ Then filter the file name for `rubeus`.
 <details>
 <summary>Hint</summary>
 
-Filter on `FileName`. Keep `ActionType`, `FolderPath`, and `SHA256` in your `project` so the file evidence is report-ready.
+Filter on `FileName`. Keep `ActionType`, `FolderPath`, and `SHA256` in your `project` so the result proves both what file appeared and where it landed.
 
 </details>
 
@@ -278,6 +294,11 @@ Why it works:
 - `ActionType` shows the file lifecycle.
 - `SHA256` identifies the exact Rubeus artifact.
 
+KQL takeaway:
+
+- Pick the table that matches the evidence type, not just the technique name.
+- File hashes make the result useful beyond this one device.
+
 </details>
 
 </blockquote>
@@ -299,6 +320,8 @@ Find the timestamp, device, file action, file name, and folder path for the Kerb
 
 Use `DeviceFileEvents` and start with a broad file-name clue. This scenario has more than one related script.
 
+KQL move: start with a broad artifact clue when you expect related files. A partial filename match can reveal a wrapper script and the script it launches.
+
 Starter:
 
 ```kusto
@@ -315,7 +338,7 @@ Then filter the file name for `kerberoast`.
 <details>
 <summary>Hint</summary>
 
-Filter on `FileName`. The broad clue `kerberoast` should reveal both the wrapper script and the main script. `Project` the file action and path so you can prove they were staged.
+Filter on `FileName`. The broad clue `kerberoast` should reveal both the wrapper script and the main script. Use `project` to keep the file action and path together.
 
 </details>
 
@@ -346,6 +369,11 @@ Why it works:
 - `ActionType` confirms the files were staged.
 - `FolderPath` shows where AttackIQ placed them.
 
+KQL takeaway:
+
+- Broad `has` searches are useful for discovery when exact filenames may vary.
+- Ordered multi-row results can show related artifacts, not just a single hit.
+
 </details>
 
 </blockquote>
@@ -367,6 +395,8 @@ Find the timestamp, device, file action, dump file name, and folder path for the
 
 Use `DeviceFileEvents` and hunt file patterns. Dump files often end in `.dmp`, and AttackIQ dump names may include `pid_`.
 
+KQL move: match file patterns instead of guessing randomized names. Use `endswith` for extensions and `or` to add another path-based clue.
+
 Starter:
 
 ```kusto
@@ -383,7 +413,7 @@ Then search for `.dmp` or `pid_`.
 <details>
 <summary>Hint</summary>
 
-Do not guess the full dump filename. Filter with `FileName endswith ".dmp"` or `FolderPath has "pid_"`.
+Do not guess the full dump filename. Use `FileName endswith ".dmp"` for the extension, then add `FolderPath has "pid_"` for the AttackIQ naming pattern.
 
 </details>
 
@@ -414,6 +444,11 @@ Why it works:
 - `pid_` catches the AttackIQ naming pattern.
 - `FolderPath` shows where the dump landed.
 
+KQL takeaway:
+
+- `endswith` is a clean way to hunt file extensions.
+- `or` lets you combine two weak pattern clues into one stronger hunt.
+
 </details>
 
 </blockquote>
@@ -435,6 +470,8 @@ Find the timestamp, device, alert title, severity, entity type, file name, and S
 
 Use `AlertEvidence` when the question asks what Defender called or did with the activity. For alert evidence, get the alert IDs from the target device first, then show the related file and machine rows.
 
+KQL move: pivot with `let`, `distinct`, and `in`. First capture the alert IDs for the target device, then use those IDs to pull back the related evidence rows.
+
 Starter:
 
 ```kusto
@@ -451,7 +488,7 @@ Then filter the alert title for `PWDump`.
 <details>
 <summary>Hint</summary>
 
-Start from the machine alert where `Title has "PWDump"`, then use the matching `AlertId` to reveal the file row with `pwdump7.zip`.
+Start from the machine alert where `Title has "PWDump"`. Save the matching `AlertId` values, then query `AlertEvidence` again to reveal the file row with `pwdump7.zip`.
 
 </details>
 
@@ -488,6 +525,11 @@ Why it works:
 - The related file row gives the artifact name and hash.
 - `Title` gives Defender's prevention verdict.
 
+KQL takeaway:
+
+- `let` can store a small result set for reuse later in the query.
+- `distinct AlertId` creates a clean pivot key for related alert evidence.
+
 </details>
 
 </blockquote>
@@ -509,6 +551,8 @@ Find the timestamp, device, alert title, severity, entity type, file name, and S
 
 Use `AlertEvidence` and search for Defender's detection name. Tool names and alert titles do not always match.
 
+KQL move: translate from Defender's detection name to the underlying artifact. Use the alert title to find the detection, then use related file evidence to identify what was staged.
+
 Starter:
 
 ```kusto
@@ -525,7 +569,7 @@ Then filter the alert title for `Vigorf`.
 <details>
 <summary>Hint</summary>
 
-Start from `Title has "Vigorf"`, then use the matching `AlertId` to reveal the actual staged filename.
+Start from `Title has "Vigorf"`, even though the tool name is `gsecdump`. The matching `AlertId` connects Defender's detection name to the staged filename.
 
 </details>
 
@@ -562,6 +606,11 @@ Why it works:
 - The related file row shows the actual tool name.
 - The hash identifies the staged zip file.
 
+KQL takeaway:
+
+- Alert titles and file names can tell different parts of the same story.
+- `EntityType` helps separate machine context from file evidence.
+
 </details>
 
 </blockquote>
@@ -583,6 +632,8 @@ Find the timestamp, device, file action, file name, folder path, and SHA256 for 
 
 Use `DeviceFileEvents` and keep `ActionType`; it tells you whether the file was created, deleted, or changed.
 
+KQL move: read file activity as a timeline. Keep `ActionType` and use `order by` so creation and cleanup appear in the order they happened.
+
 Starter:
 
 ```kusto
@@ -599,7 +650,7 @@ Then filter the file name for `lazagne`.
 <details>
 <summary>Hint</summary>
 
-Look for more than one row. `FileCreated` and `FileDeleted` together tell the cleanup story.
+Look for more than one row. `FileCreated` and `FileDeleted` together tell the cleanup story, and `order by Timestamp asc` puts that story in sequence.
 
 </details>
 
@@ -630,6 +681,11 @@ Why it works:
 - `FileName has "lazagne"` catches the staged tool.
 - Cleanup does not remove the telemetry.
 
+KQL takeaway:
+
+- `ActionType` turns file events into a lifecycle.
+- `order by Timestamp asc` helps reconstruct the sequence of activity.
+
 </details>
 
 </blockquote>
@@ -651,6 +707,8 @@ Find the timestamp, device, alert title, severity, entity type, file name, and S
 
 Use `AlertEvidence` when Defender has a verdict and hash for a staged script. Scope to the target device first, then pull back the related file evidence.
 
+KQL move: combine broad alert scoping with exact artifact matching. Find the related alert first, then use `=~` to match the script filename precisely without caring about case.
+
 Starter:
 
 ```kusto
@@ -667,7 +725,7 @@ Then filter for Defender's Mimikatz alert and the exact script filename.
 <details>
 <summary>Hint</summary>
 
-Do not search only for `mimikatz.exe`. Use `AlertId` to connect the target-device alert to the script file row with the hash.
+Do not search only for `mimikatz.exe`. Use `AlertId` to connect the target-device alert to the script file row, then use the exact script filename to keep the result focused.
 
 </details>
 
@@ -704,6 +762,11 @@ Why it works:
 - `FileName =~ "mimikatz_dump_passwords_v2.ps1"` keeps the answer focused on the script.
 - `SHA256` gives the durable indicator for the script.
 
+KQL takeaway:
+
+- Use alert context first when the file evidence is related but not on the initial machine row.
+- `=~` performs exact case-insensitive matching.
+
 </details>
 
 </blockquote>
@@ -725,6 +788,8 @@ Find the timestamp, device, alert title, severity, entity type, file name, and S
 
 Use `AlertEvidence` when the answer needs Defender's verdict and the file hash. Scope to the target device, then pull back the related file evidence.
 
+KQL move: normalize sparse related-evidence fields. Use `iff()` and `isempty()` when the related file row has the right artifact but not every display field filled in.
+
 Starter:
 
 ```kusto
@@ -741,7 +806,7 @@ Then intersect the target-device Mimikatz alert with the exact package filename.
 <details>
 <summary>Hint</summary>
 
-The exact file is `mimikatz-x64.zip`. Use `AlertId` to connect the target-device alert to the file evidence row with the hash.
+The exact file is `mimikatz-x64.zip`. Use `AlertId` to connect the target-device alert to the file evidence row, and watch how `iff()` fills the device value for cleaner output.
 
 </details>
 
@@ -778,6 +843,11 @@ Why it works:
 - `Title` confirms Defender's verdict.
 - `FileName =~ "mimikatz-x64.zip"` keeps this focused on the original package.
 - `SHA256` gives the durable indicator for the package.
+
+KQL takeaway:
+
+- `iff(isempty(...), ..., ...)` can clean up sparse related-evidence output.
+- A focused `project` makes the final row easier to review and share.
 
 </details>
 
