@@ -630,88 +630,103 @@ What is the exact PowerShell script filename, and which ATT&CK technique did Def
 
 ## KQL Skill
 
-Use `AlertEvidence` to connect the script filename to Defender's ATT&CK mapping.
+Use file evidence to find the script, then use `AlertEvidence` to read Defender's ATT&CK mapping.
 
 ### Start This Way
 
-Every scenario starts by scoping to the AttackIQ workstation. Run this first and keep it as the top of each query.
+First find the script on the AttackIQ workstation.
 
 ```kusto
 let TargetDevice = "usm262346";
-AlertEvidence
+DeviceFileEvents
 | where Timestamp > ago(14d)
 | where DeviceName == TargetDevice
 ```
 
 Hints and guidelines:
 
-- Use `AlertEvidence` because the question asks what Defender attached to the script.
+- `DeviceFileEvents` can show the script file that landed on disk.
+- `AlertEvidence` can show Defender's alert title and ATT&CK mapping.
 - Do not type the exact script name yet.
-- `Title` tells you what Defender called the alert.
-- `FileName` tells you what script or file Defender attached to the alert.
-- `AttackTechniques` tells you the ATT&CK mapping.
+- Keep `where DeviceName == TargetDevice` in both hunts.
 
 <details>
-<summary>Step 1 - Show The Useful Columns</summary>
+<summary>Step 1 - Find The Script File</summary>
 
-Start with the scoped workstation query. Then add the columns that answer the question.
+Start with file events on the scoped workstation, then add a broad credential clue.
 
 ```kusto
 let TargetDevice = "usm262346";
-AlertEvidence
+DeviceFileEvents
 | where Timestamp > ago(14d)
 | where DeviceName == TargetDevice
-| project Timestamp, Title, FileName, AttackTechniques, SHA256
+| where FileName has "credentials" or FolderPath has "credentials"
+| project Timestamp, DeviceName, ActionType, FileName, FolderPath
 | order by Timestamp asc
 ```
 
 Read the results this way:
 
-- `Title`: what Defender called the alert
-- `FileName`: the script or file Defender attached to the alert
-- `AttackTechniques`: the ATT&CK mapping
+- `FileName`: the script file name
+- `FolderPath`: where the script landed
+- `ActionType`: what happened to the file
 
 </details>
 
 <details>
-<summary>Step 2 - Reduce The Noise</summary>
+<summary>Step 2 - Read Defender's Mapping</summary>
 
-Keep the same query and add one broad clue line for PowerShell, registry, or credential wording.
+Now switch to alert evidence on the same workstation. This is where Defender's title and ATT&CK mapping live.
 
 ```kusto
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(14d)
 | where DeviceName == TargetDevice
-| where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has "Credential"
-| project Timestamp, Title, FileName, AttackTechniques, SHA256
+| where Title has "PowerShell" or AttackTechniques has "Credentials in Registry"
+| project Timestamp, DeviceName, EntityType, Title, AttackTechniques
 | order by Timestamp asc
 ```
 
-Do not type the exact script name yet. Let the results show it first.
+Read the results this way:
+
+- `Title`: Defender's alert wording
+- `AttackTechniques`: the ATT&CK mapping
+- `EntityType`: the type of evidence row
 
 Use the output to answer:
 
-- What exact script name appears in `FileName`?
-- What technique appears in `AttackTechniques`?
+- What exact script name appeared in Step 1?
+- What ATT&CK technique appears in Step 2?
 
-If you can explain `Title`, `FileName`, and `AttackTechniques`, you have the answer.
+If you can explain the script from file evidence and the ATT&CK mapping from alert evidence, you have the answer.
 
 </details>
 
 <details>
 <summary>Full Answer</summary>
 
-The full answer query tightens the hunt to the exact script after you discover it in Step 2.
+Final script query:
+
+```kusto
+let TargetDevice = "usm262346";
+DeviceFileEvents
+| where Timestamp > ago(14d)
+| where DeviceName == TargetDevice
+| where FileName =~ "credentials_in_registry.ps1"
+| project Timestamp, DeviceName, ActionType, FileName, FolderPath
+| order by Timestamp asc
+```
+
+Final alert query:
 
 ```kusto
 let TargetDevice = "usm262346";
 AlertEvidence
 | where Timestamp > ago(14d)
 | where DeviceName == TargetDevice
-| where FileName =~ "credentials_in_registry.ps1"
 | where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
-| project Timestamp, Title, FileName, AttackTechniques, SHA256
+| project Timestamp, DeviceName, EntityType, Title, AttackTechniques
 | order by Timestamp asc
 ```
 
@@ -721,9 +736,8 @@ AlertEvidence
 
 Why this is the answer:
 
-- `FileName` gives the exact script.
-- `Title` gives Defender's alert wording.
-- `AttackTechniques` gives the ATT&CK mapping.
+- `DeviceFileEvents` shows the script file on `usm262346`.
+- `AlertEvidence` shows Defender's alert wording and ATT&CK mapping on `usm262346`.
 
 </details>
 
