@@ -33,7 +33,10 @@ Filter on `ProcessCommandLine`. The useful clue is `credentials_in_registry`.
 
 </details>
 
-### Run This Query
+<details>
+<summary>Answer</summary>
+
+Final KQL:
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -45,18 +48,20 @@ DeviceProcessEvents
 | order by Timestamp asc
 ```
 
-### Answer
+Result:
 
 - Script: `credentials_in_registry.ps1`
 - Process: `powershell.exe`
 - Account: `xadmin`
 - Parent: `python.exe` running `attack_graph.py`
 
-### Why It Works
+Why it works:
 
 - `ProcessCommandLine` shows the full PowerShell command.
 - `credentials_in_registry` is the unique scenario clue.
 - `InitiatingProcessFileName` and `InitiatingProcessCommandLine` show the AttackIQ parent process.
+
+</details>
 
 </details>
 
