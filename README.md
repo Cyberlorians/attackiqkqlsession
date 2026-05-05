@@ -2,7 +2,23 @@
 
 ## Scenario 01 - Credentials In Registry Script
 
-Find the PowerShell script that ran the credentials-in-registry test.
+### What Happened
+
+AttackIQ ran a PowerShell script that simulates looking for credentials stored in the Windows registry.
+
+### Your Challenge
+
+Find the script name, the account that ran it, and the exact command line.
+
+### KQL Skill
+
+Use `DeviceProcessEvents` to search process command lines on one workstation.
+
+### How To Think About It
+
+This is a process question. The script ran through PowerShell, so the useful evidence is in `ProcessCommandLine`. Start with the target device, search for the scenario keyword, then show the columns that prove what ran.
+
+### Run This Query
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -14,12 +30,19 @@ DeviceProcessEvents
 | order by Timestamp asc
 ```
 
-Answer:
+### Answer
 
 - Script: `credentials_in_registry.ps1`
 - Process: `powershell.exe`
 - Account: `xadmin`
 - Parent: `python.exe` running `attack_graph.py`
+
+### Why It Works
+
+- `DeviceProcessEvents` shows executed processes.
+- `DeviceName == TargetDevice` keeps the hunt on the AttackIQ workstation.
+- `ProcessCommandLine has "credentials_in_registry"` finds the scenario without needing the full filename first.
+- `InitiatingProcessFileName` and `InitiatingProcessCommandLine` show AttackIQ's parent process.
 
 ## Scenario 02 - Dump SAM Registry Hive
 
