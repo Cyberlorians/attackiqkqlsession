@@ -15,6 +15,8 @@ Find the timestamp, device, account, process name, exact command line, parent pr
 
 Use `DeviceProcessEvents` when the question is about a command that ran. Start by scoping to the AttackIQ workstation.
 
+KQL move: build the basic hunt pipeline with `where`, search the command line with `has`, and use `project` to return only the evidence fields that answer the challenge.
+
 Starter:
 
 ```kusto
@@ -31,7 +33,7 @@ Then search the command line for the scenario keyword: `credentials_in_registry`
 <details>
 <summary>Hint</summary>
 
-Filter on `ProcessCommandLine`. The useful clue is `credentials_in_registry`. Don't forget your challenge to `project` the answers. Pun intended.
+Filter on `ProcessCommandLine`. The useful clue is `credentials_in_registry`, and `project` is where you turn the raw event into the exact answer fields.
 
 </details>
 
@@ -62,6 +64,11 @@ Why it works:
 - `ProcessCommandLine` shows the full PowerShell command.
 - `credentials_in_registry` is the unique scenario clue.
 - `InitiatingProcessFileName` and `InitiatingProcessCommandLine` show the AttackIQ parent process.
+
+KQL takeaway:
+
+- Use `where` early to reduce noise by time and device.
+- Use `project` at the end to make the result analyst-ready.
 
 </details>
 
