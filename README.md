@@ -31,7 +31,7 @@ Then search the command line for the scenario keyword: `credentials_in_registry`
 <details>
 <summary>Hint</summary>
 
-Filter on `ProcessCommandLine`. The useful clue is `credentials_in_registry`.
+Filter on `ProcessCommandLine`. The useful clue is `credentials_in_registry`. Don't forget your challenge to `project` the answers. Pun intended.
 
 </details>
 
