@@ -634,7 +634,7 @@ Use `AlertEvidence` to connect the script filename to Defender's ATT&CK mapping.
 
 ### Start This Way
 
-Every scenario starts by scoping to the AttackIQ workstation. This keeps the hunt small before you add scenario clues.
+Every scenario starts by scoping to the AttackIQ workstation. Run this first and keep it as the top of each query.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -643,21 +643,18 @@ AlertEvidence
 | where DeviceName == TargetDevice
 ```
 
-Before writing the rest of the query, use the same simple hunt flow:
+Hints and guidelines:
 
-- Start with the scoped workstation query above.
-- Add only the columns needed to answer the question.
-- Let the results show the script name and ATT&CK mapping.
+- Use `AlertEvidence` because the question asks what Defender attached to the script.
+- Do not type the exact script name yet.
+- `Title` tells you what Defender called the alert.
+- `FileName` tells you what script or file Defender attached to the alert.
+- `AttackTechniques` tells you the ATT&CK mapping.
 
 <details>
-<summary>Build The Hunt Step By Step</summary>
+<summary>Step 1 - Show The Useful Columns</summary>
 
-Goal: answer two questions from the same alert evidence rows:
-
-- What script file did Defender alert on?
-- What ATT&CK technique did Defender map it to?
-
-Step 1: add the columns that answer the question.
+Start with the scoped workstation query. Then add the columns that answer the question.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -674,7 +671,12 @@ Read the results this way:
 - `FileName`: the script or file Defender attached to the alert
 - `AttackTechniques`: the ATT&CK mapping
 
-Step 2: add one broad clue line to reduce the noise.
+</details>
+
+<details>
+<summary>Step 2 - Reduce The Noise</summary>
+
+Keep the same query and add one broad clue line for PowerShell, registry, or credential wording.
 
 ```kusto
 let TargetDevice = "usm262346";
@@ -686,19 +688,32 @@ AlertEvidence
 | order by Timestamp asc
 ```
 
-Do not type the exact script name yet. Let the results show it.
+Do not type the exact script name yet. Let the results show it first.
 
 Use the output to answer:
 
 - What exact script name appears in `FileName`?
 - What technique appears in `AttackTechniques`?
 
-Checkpoint: if you can explain `Title`, `FileName`, and `AttackTechniques`, you have the answer.
+If you can explain `Title`, `FileName`, and `AttackTechniques`, you have the answer.
 
 </details>
 
 <details>
-<summary>Answer</summary>
+<summary>Full Answer</summary>
+
+The full answer query tightens the hunt to the exact script after you discover it in Step 2.
+
+```kusto
+let TargetDevice = "usm262346";
+AlertEvidence
+| where Timestamp > ago(14d)
+| where DeviceName == TargetDevice
+| where FileName =~ "credentials_in_registry.ps1"
+| where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
+| project Timestamp, Title, FileName, AttackTechniques, SHA256
+| order by Timestamp asc
+```
 
 - Script: `credentials_in_registry.ps1`
 - Alert: `A malicious PowerShell Cmdlet was invoked on the machine`
@@ -709,12 +724,6 @@ Why this is the answer:
 - `FileName` gives the exact script.
 - `Title` gives Defender's alert wording.
 - `AttackTechniques` gives the ATT&CK mapping.
-
-After you know the script name, you can tighten the hunt with:
-
-```kusto
-| where FileName =~ "credentials_in_registry.ps1"
-```
 
 </details>
 
