@@ -9,7 +9,7 @@ AttackIQ ran a PowerShell script that simulates looking for credentials stored i
 
 ### Your Challenge
 
-Find the script name, the account that ran it, and the exact command line.
+Find the timestamp, device, account, process name, exact command line, parent process name, and parent command line for the credentials-in-registry script.
 
 ### KQL Skill & How To Hunt
 
@@ -25,6 +25,13 @@ DeviceProcessEvents
 ```
 
 Then search the command line for the scenario keyword: `credentials_in_registry`.
+
+<details>
+<summary>Hint</summary>
+
+Filter on `ProcessCommandLine`. The useful clue is `credentials_in_registry`.
+
+</details>
 
 ### Run This Query
 
