@@ -634,69 +634,88 @@ Use the step-by-step queries first. Then open **Full Answer And Explanation** to
 
 Use `AlertEvidence` to connect the script filename to Defender's ATT&CK mapping.
 
-## How To Think About The Query
+### Start This Way
 
-Before looking for the filename, ask:
+Every scenario starts by scoping to the AttackIQ workstation. This keeps the hunt small before you add scenario clues.
 
-- Which table records Defender's explanation of an alert?
-- Which columns might show the artifact name and the ATT&CK technique?
-- How can I start broad enough to discover the script before I filter to it?
+```kusto
+let TargetDevice = "usm262346";
+AlertEvidence
+| where Timestamp > ago(14d)
+| where DeviceName == TargetDevice
+```
+
+Before writing the rest of the query, use the same simple hunt flow:
+
+- Start with the scoped workstation query above.
+- Find the alert rows before typing the exact script name.
+- Use `FileName` to identify the script and `AttackTechniques` to identify the mapping.
 
 <details>
 <summary>Break Down The KQL</summary>
 
-**Nugget:** Always scope to the AttackIQ workstation before adding scenario clues. The activity was deployed from `usm262346`, so every practice query should start with `let TargetDevice = "usm262346";` and include `| where DeviceName == TargetDevice`.
+Stay in `AlertEvidence` for this scenario. The challenge asks what Defender attached to the script, so start in the table that records alert evidence.
 
-Stay in `AlertEvidence` for this scenario. The challenge asks for Defender's ATT&CK mapping, and that mapping lives in the alert evidence row.
+Hints and guidelines:
 
-Why this matters: start with the Defender wording, look at the `FileName`, then keep that exact filename in the final query.
+- Do not type the exact script name yet.
+- `Title` tells you what Defender called the alert.
+- `FileName` tells you what script or file was involved.
+- `AttackTechniques` tells you the ATT&CK mapping.
 
 ### Build The Hunt Step By Step
 
 Mission: find the PowerShell script and the ATT&CK technique from the same alert-evidence rows.
 
-Step 1: start in `AlertEvidence` and search for the Defender wording. Keep the same output columns you will use in the answer.
+Step 1: start with the scoped workstation query, then add the columns you need to answer the challenge.
 
 ```kusto
 let TargetDevice = "usm262346";
 AlertEvidence
-| where Timestamp > ago(7d)
+| where Timestamp > ago(14d)
 | where DeviceName == TargetDevice
-| where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
 | project Timestamp, Title, FileName, AttackTechniques, SHA256
 | order by Timestamp asc
 ```
 
-Look at `FileName` in the results. That is where the exact script name appears.
+Look at these columns in the results:
 
-Step 2: keep the same query and add the exact filename you found.
+- `Title`: what Defender called the alert
+- `FileName`: the script or file involved
+- `AttackTechniques`: the ATT&CK technique Defender mapped
+
+Step 2: keep the same query and add a broad clue filter for PowerShell, registry, or credential wording.
 
 ```kusto
 let TargetDevice = "usm262346";
 AlertEvidence
-| where Timestamp > ago(7d)
+| where Timestamp > ago(14d)
 | where DeviceName == TargetDevice
-| where FileName =~ "credentials_in_registry.ps1"
-| where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
+| where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has "Credential"
 | project Timestamp, Title, FileName, AttackTechniques, SHA256
 | order by Timestamp asc
 ```
 
-What changed in step 2: only one line was added, `where FileName =~ "credentials_in_registry.ps1"`. The table, output columns, and sort stayed the same.
+Now answer the challenge from the result columns:
 
-KQL logic to learn: build the hunt one line at a time. First find the right alert rows, then lock the query to the exact filename.
+- What exact script name appears in `FileName`?
+- What technique appears in `AttackTechniques`?
+
+What changed in step 2: only one broad clue line was added. The table, device scope, output columns, and sort stayed the same.
+
+KQL logic to learn: build the hunt one line at a time. First scope to the workstation, then inspect the useful columns, then add a broad clue filter. The exact filename belongs in the final answer after you discover it.
 
 </details>
 
 <details>
 <summary>Full Answer And Explanation</summary>
 
-Step 2 is the final query. It is repeated here so you can check your work.
+After the breakdown reveals the script name, the final query tightens to that exact filename.
 
 ```kusto
 let TargetDevice = "usm262346";
 AlertEvidence
-| where Timestamp > ago(7d)
+| where Timestamp > ago(14d)
 | where DeviceName == TargetDevice
 | where FileName =~ "credentials_in_registry.ps1"
 | where Title has_any ("PowerShell", "Registry", "Credentials") or AttackTechniques has_any ("Credentials in Registry", "T1552.002")
